@@ -13,8 +13,16 @@ log = logging.getLogger("poe_qol.hotkeys")
 
 try:
     import keyboard as _kb  # type: ignore
-except Exception:  # pragma: no cover
+    _kb_err: Exception | None = None
+except Exception as _e:  # pragma: no cover
     _kb = None
+    _kb_err = _e
+    log.error(
+        "keyboard library unavailable (%s: %s) — global hotkeys "
+        "(F12 emergency stop, F1..F4 dumps, etc.) will NOT fire. "
+        "On Linux the package needs root; on Windows make sure "
+        "`pip install keyboard` succeeded.",
+        type(_e).__name__, _e)
 
 
 class HotkeyRouter:
@@ -48,12 +56,24 @@ class HotkeyRouter:
                 break
         self._bindings[name] = (combo, callback)
         if _kb:
+            # Wrap the callback so we get visibility when a hotkey
+            # actually fires. Without this a silently-dropped F12
+            # looks identical to a working-but-no-op F12.
+            def _traced(cb=callback, name=name, combo=combo):
+                log.info("hotkey fired: %s (%s)", name, combo)
+                try:
+                    cb()
+                except Exception:
+                    log.exception("hotkey %s callback raised", name)
             try:
-                h = _kb.add_hotkey(combo, callback, suppress=False)
+                h = _kb.add_hotkey(combo, _traced, suppress=False)
                 self._handles[name] = h
                 log.info("bound %s -> %s", name, combo)
             except Exception:
                 log.exception("failed binding %s=%s", name, combo)
+        else:
+            log.warning("skipping %s=%s bind: keyboard lib unavailable",
+                        name, combo)
 
     def unbind(self, name: str) -> None:
         if name in self._handles and _kb:

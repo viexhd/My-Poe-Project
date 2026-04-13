@@ -26,15 +26,16 @@ version: 2
 #                    "unique" | "uniquefoil" | null)
 #   corrupted    -> misc_filters.filters.corrupted.option
 #                   ("true" | "false" | null)
-#   map_num_mods -> map_filters.filters.map_num_mods.{min,max}
-#                   (null/missing disables the bound)
+#
+# NOTE: there is no public trade-API filter for "number of modifiers
+# on a map". `map_filters.map_num_mods` is rejected with
+# "Invalid filter", and no documented pseudo stat exposes it either.
+# The UI therefore doesn't offer a min-mods spinner; picking Rare +
+# Corrupted is the closest proxy for "8-mod rare maps".
 # ---------------------------------------------------------------------
 defaults:
-  rarity: nonunique        # non-unique = normal / magic / rare
+  rarity: rare             # rare only (corrupted rare → 8 mods)
   corrupted: "true"        # corrupted only
-  map_num_mods:
-    min: 8                 # 8+ mods (leave max null for "or more")
-    max: null
 
 # ---------------------------------------------------------------------
 # Item types (populates the "Item Type" dropdown). The trade query

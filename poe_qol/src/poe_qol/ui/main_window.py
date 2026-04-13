@@ -9,6 +9,7 @@ Tabs:
 from __future__ import annotations
 
 from PySide6.QtCore import Qt, QTimer
+from PySide6.QtGui import QKeySequence, QShortcut
 from PySide6.QtWidgets import (
     QCheckBox, QHBoxLayout, QLabel, QLineEdit, QMainWindow, QPushButton,
     QSpinBox, QTabWidget, QVBoxLayout, QWidget,
@@ -42,6 +43,18 @@ class MainWindow(QMainWindow):
         tabs.addTab(self._build_inventory_tab(), "Inventory")
         tabs.addTab(self._build_map_stash_tab(), "Map Stash")
         tabs.addTab(MapSearchWidget(cfg), "Map Search")
+
+        # Qt-level fallback shortcut for emergency stop. The primary
+        # path is the global `keyboard` hook (input/hotkeys.py), but
+        # that fails silently when:
+        #   * PoE runs as admin and this app doesn't (Windows UIPI)
+        #   * the `keyboard` package isn't installed / lacks privileges
+        # In those cases F12 still fires when *our* window has focus,
+        # so Alt-Tabbing here and pressing F12 remains a reliable kill.
+        self._estop_shortcut = QShortcut(QKeySequence("F12"), self)
+        self._estop_shortcut.setContext(
+            Qt.ShortcutContext.ApplicationShortcut)
+        self._estop_shortcut.activated.connect(self.scheduler.emergency_stop)
 
         # Status bar
         self.status = QLabel("Idle")
