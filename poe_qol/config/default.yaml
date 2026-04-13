@@ -43,16 +43,26 @@ macros:
     hotkeys:
       left:  f1
       right: f2
-    # Option A: fixed grid parameters (matches inventory.ahk defaults)
+    # Origin resolution order (first non-null wins):
+    #   1. anchor_template    – OpenCV template match on screen
+    #   2. origin_relative_to_window – offset from PoE window anchor
+    #   3. grid.origin        – absolute screen coordinates
     grid:
       origin: [1988, 612]    # top-left slot centre, screen coords
       cell_size: [53, 55]    # (w, h) spacing between slots
       cols: 12
       rows: 5
       pattern: serpentine    # serpentine | row_major
-    # Option B: vision-anchored origin – if this template resolves, it
-    # overrides grid.origin.
     anchor_template: null    # e.g. "inventory_anchor.png"
+    # Window-relative origin – survives window moves / resolution changes.
+    # `anchor`: top_left | top_right | bottom_left | bottom_right | center
+    # `offset`: [dx, dy] pixels from that anchor to the top-left slot centre.
+    # Leave null to disable this mode.
+    origin_relative_to_window: null
+    # Game window detection (for origin_relative_to_window and overlay).
+    window:
+      title_pattern: "Path of Exile"
+      class_pattern: null
     modifier: ctrl           # hold this key for the entire sweep
     click_delay_ms: [30, 80]
     show_progress: true

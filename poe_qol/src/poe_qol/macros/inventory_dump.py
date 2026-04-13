@@ -98,32 +98,59 @@ class InventoryDumpMacro(Macro):
 
     # ---- helpers ----
     def _resolve_origin(self) -> tuple[int, int]:
-        tpl_name = self.cfg.get("macros.inventory_dump.anchor_template")
+        """Resolution order: template match -> window-relative -> absolute."""
         fallback = tuple(self.cfg.get("macros.inventory_dump.grid.origin",
                                       [1988, 612]))
-        if not tpl_name:
-            return fallback  # type: ignore[return-value]
-        try:
-            from ..vision.capture import Capture
-            from ..vision.detect import load_template, match_template
-        except Exception:
-            self.log.warning("vision deps unavailable; using origin")
-            return fallback  # type: ignore[return-value]
-        root = Path(self.cfg.get("vision.template_dir", "assets/templates"))
-        tpl = load_template(root / tpl_name)
-        if tpl is None:
-            self.log.warning("anchor template %s not found; using origin", tpl_name)
-            return fallback  # type: ignore[return-value]
-        try:
-            cap = Capture(self.cfg.get("vision.default_monitor", 1))
-            frame = cap.grab()
-            hit = match_template(frame, tpl,
-                                 self.cfg.get("vision.match_threshold", 0.86))
-            if hit:
-                self.log.info("anchor matched at %s (score %.2f)", hit[:2], hit[2])
-                return (hit[0], hit[1])
-        except Exception:
-            self.log.exception("anchor detection failed")
+
+        # 1. template match
+        tpl_name = self.cfg.get("macros.inventory_dump.anchor_template")
+        if tpl_name:
+            try:
+                from ..vision.capture import Capture
+                from ..vision.detect import load_template, match_template
+                root = Path(self.cfg.get("vision.template_dir",
+                                         "assets/templates"))
+                tpl = load_template(root / tpl_name)
+                if tpl is None:
+                    self.log.warning("anchor template %s not found", tpl_name)
+                else:
+                    cap = Capture(self.cfg.get("vision.default_monitor", 1))
+                    frame = cap.grab()
+                    hit = match_template(
+                        frame, tpl,
+                        self.cfg.get("vision.match_threshold", 0.86))
+                    if hit:
+                        self.log.info("anchor matched at %s (score %.2f)",
+                                      hit[:2], hit[2])
+                        return (hit[0], hit[1])
+            except Exception:
+                self.log.exception("template anchor failed")
+
+        # 2. window-relative
+        rel = self.cfg.get("macros.inventory_dump.origin_relative_to_window")
+        if rel:
+            try:
+                from ..vision.window import find_window
+                rect = find_window(
+                    self.cfg.get("macros.inventory_dump.window.title_pattern",
+                                 "Path of Exile"),
+                    self.cfg.get("macros.inventory_dump.window.class_pattern"),
+                )
+                if rect is not None:
+                    ax, ay = rect.anchor(rel.get("anchor", "top_left"))
+                    dx, dy = rel.get("offset", [0, 0])
+                    resolved = (ax + int(dx), ay + int(dy))
+                    self.log.info("window-relative origin: anchor=%s "
+                                  "rect=(%d,%d-%d,%d) -> %s",
+                                  rel.get("anchor"),
+                                  rect.left, rect.top, rect.right, rect.bottom,
+                                  resolved)
+                    return resolved
+                self.log.warning("PoE window not found; using absolute origin")
+            except Exception:
+                self.log.exception("window-relative origin failed")
+
+        # 3. absolute fallback
         return fallback  # type: ignore[return-value]
 
     def _effective_selection(self) -> list[tuple[int, int]]:

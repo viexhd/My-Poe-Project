@@ -92,11 +92,20 @@ class SlotSelector(QWidget):
             prof.addWidget(btn)
         v.addLayout(prof)
 
-        # Overlay toggle
+        # Overlay + calibration row
+        ov = QHBoxLayout()
         self.overlay_btn = QPushButton("Show overlay")
         self.overlay_btn.setCheckable(True)
         self.overlay_btn.toggled.connect(self._on_overlay_toggle)
-        v.addWidget(self.overlay_btn)
+        ov.addWidget(self.overlay_btn, 1)
+
+        self.calibrate_btn = QPushButton("Calibrate…")
+        self.calibrate_btn.setToolTip(
+            "Capture top-left / right / down slot positions from the cursor "
+            "and compute origin + cell size automatically.")
+        self.calibrate_btn.clicked.connect(self._on_calibrate)
+        ov.addWidget(self.calibrate_btn, 1)
+        v.addLayout(ov)
 
         summary = QLabel()
         self._summary = summary
@@ -224,6 +233,16 @@ class SlotSelector(QWidget):
             p.unlink()
         self._refresh_profiles()
 
+    # ---- calibration ----
+    def _on_calibrate(self) -> None:
+        from .calibrate_dialog import CalibrateDialog
+        dlg = CalibrateDialog(self.cfg, self)
+        if dlg.exec():
+            # refresh overlay if visible so it reflects new origin/cell
+            if self._overlay:
+                self._overlay._reposition()
+                self._overlay.refresh(self._current_selected())
+
     # ---- overlay ----
     def _on_overlay_toggle(self, on: bool) -> None:
         if on:
@@ -257,8 +276,31 @@ class _OverlayWindow(QWidget):
         self._timer.start(250)
         self._reposition()
 
+    def _current_origin(self) -> tuple[int, int]:
+        """Mirror of InventoryDumpMacro._resolve_origin, sans template
+        match (we don't want to capture the screen at 4 Hz)."""
+        rel = self.cfg.get("macros.inventory_dump.origin_relative_to_window")
+        if rel:
+            try:
+                from ..vision.window import find_window
+                rect = find_window(
+                    self.cfg.get(
+                        "macros.inventory_dump.window.title_pattern",
+                        "Path of Exile"),
+                    self.cfg.get(
+                        "macros.inventory_dump.window.class_pattern"),
+                )
+                if rect is not None:
+                    ax, ay = rect.anchor(rel.get("anchor", "top_left"))
+                    dx, dy = rel.get("offset", [0, 0])
+                    return (ax + int(dx), ay + int(dy))
+            except Exception:
+                pass
+        return tuple(  # type: ignore[return-value]
+            self.cfg.get("macros.inventory_dump.grid.origin", [1988, 612]))
+
     def _reposition(self) -> None:
-        origin = self.cfg.get("macros.inventory_dump.grid.origin", [1988, 612])
+        origin = self._current_origin()
         cell = self.cfg.get("macros.inventory_dump.grid.cell_size", [53, 55])
         rows = self.cfg.get("macros.inventory_dump.grid.rows", 5)
         cols = self.cfg.get("macros.inventory_dump.grid.cols", 12)
@@ -266,6 +308,7 @@ class _OverlayWindow(QWidget):
         pad = max(cell) // 2 + 4
         w = cols * cell[0] + pad * 2
         h = rows * cell[1] + pad * 2
+        self._origin_cache = origin
         self.setGeometry(origin[0] - pad, origin[1] - pad, w, h)
 
     def refresh(self, selected) -> None:
@@ -273,7 +316,7 @@ class _OverlayWindow(QWidget):
         self.update()
 
     def paintEvent(self, _e) -> None:  # noqa: N802 – Qt naming
-        origin = self.cfg.get("macros.inventory_dump.grid.origin", [1988, 612])
+        origin = getattr(self, "_origin_cache", None) or self._current_origin()
         cell = self.cfg.get("macros.inventory_dump.grid.cell_size", [53, 55])
         pad = max(cell) // 2 + 4
         size = min(cell)  # square highlight
