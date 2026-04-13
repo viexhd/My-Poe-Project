@@ -3,13 +3,20 @@
 Workflow:
     1. Open this dialog. A global hotkey (default F8) is bound while
        it is visible.
-    2. Hover the centre of the *top-left* inventory slot in PoE,
-       press F8.
-    3. Hover the slot one column to the right, press F8.
-    4. Hover the slot one row below the first, press F8.
-    5. Click OK – writes origin + cell_size back to config. If the PoE
-       window is detected, also writes `origin_relative_to_window` so
-       moving / resizing the window survives.
+    2. Hover the centre of the *top-left* slot in PoE, press F8.
+    3. Hover the centre of the *top-right* slot (last column of the
+       first row) and press F8.
+    4. Hover the centre of the *bottom-left* slot (first column of
+       the last row) and press F8.
+    5. Click OK – writes origin + cell_size back to config AND
+       persists them to ``config/user.yaml`` so they survive a
+       restart. If the PoE window is detected, also writes
+       ``origin_relative_to_window`` so moving / resizing the window
+       survives.
+
+Measuring across the full grid (rather than adjacent neighbours)
+divides the pixel-precision error by (cols-1) / (rows-1), so the
+overlay highlights stay aligned all the way to the far corner.
 
 The hotkey is rebindable from the Hotkey field in the dialog.
 """
@@ -45,12 +52,14 @@ def _cursor() -> Optional[tuple[int, int]]:
         return None
 
 
-# Order of capture steps.
-_STEPS = ("tl", "r", "d")
+# Order of capture steps. Corner-to-corner: this divides the
+# per-capture pixel error by (cols-1) / (rows-1) instead of leaving
+# it to compound across the grid.
+_STEPS = ("tl", "tr", "bl")
 _STEP_LABEL = {
     "tl": "Hover the TOP-LEFT slot, then press the hotkey.",
-    "r":  "Hover the slot ONE COLUMN to the right of top-left, then press the hotkey.",
-    "d":  "Hover the slot ONE ROW below top-left, then press the hotkey.",
+    "tr": "Hover the TOP-RIGHT slot (last column, first row), then press the hotkey.",
+    "bl": "Hover the BOTTOM-LEFT slot (first column, last row), then press the hotkey.",
 }
 
 
@@ -116,11 +125,13 @@ class CalibrateDialog(QDialog):
         # Captured values
         form = QFormLayout()
         self.lbl_tl = QLabel("—")
-        self.lbl_r  = QLabel("—")
-        self.lbl_d  = QLabel("—")
-        form.addRow("Top-left:", self.lbl_tl)
-        form.addRow("Right neighbour:", self.lbl_r)
-        form.addRow("Below top-left:", self.lbl_d)
+        self.lbl_tr = QLabel("—")
+        self.lbl_bl = QLabel("—")
+        cols = self.cfg.get(self._k("grid", "cols"), 12)
+        rows = self.cfg.get(self._k("grid", "rows"), 5)
+        form.addRow("Top-left (0,0):", self.lbl_tl)
+        form.addRow(f"Top-right (0,{cols - 1}):", self.lbl_tr)
+        form.addRow(f"Bottom-left ({rows - 1},0):", self.lbl_bl)
         v.addLayout(form)
 
         # Reset / redo row
@@ -212,7 +223,7 @@ class CalibrateDialog(QDialog):
 
     def _update_label(self, step: str, pos: tuple[int, int]) -> None:
         text = f"{pos[0]}, {pos[1]}"
-        {"tl": self.lbl_tl, "r": self.lbl_r, "d": self.lbl_d}[step].setText(text)
+        {"tl": self.lbl_tl, "tr": self.lbl_tr, "bl": self.lbl_bl}[step].setText(text)
 
     def _refresh_prompt(self) -> None:
         if self._step_idx >= len(_STEPS):
@@ -226,23 +237,32 @@ class CalibrateDialog(QDialog):
                 + f"\n(hotkey: {self._hotkey_combo})"
             )
 
+    def _cell_size(self) -> tuple[float, float]:
+        """Derive (cell_w, cell_h) from the three captures using the
+        FULL grid distance — cuts calibration drift to sub-pixel."""
+        c = self._captures
+        cols = self.cfg.get(self._k("grid", "cols"), 12)
+        rows = self.cfg.get(self._k("grid", "rows"), 5)
+        cw = (c["tr"][0] - c["tl"][0]) / max(1, cols - 1)
+        ch = (c["bl"][1] - c["tl"][1]) / max(1, rows - 1)
+        return cw, ch
+
     def _refresh_summary(self) -> None:
         c = self._captures
         if not all(k in c for k in _STEPS):
             self.status.setText("")
             self.ok_btn.setEnabled(False)
             return
-        cw = c["r"][0] - c["tl"][0]
-        ch = c["d"][1] - c["tl"][1]
+        cw, ch = self._cell_size()
         self.status.setText(
             f"origin=({c['tl'][0]},{c['tl'][1]})  "
-            f"cell_size=({cw},{ch})")
+            f"cell_size=({cw:.2f},{ch:.2f})")
         self.ok_btn.setEnabled(cw > 0 and ch > 0)
 
     def _reset(self) -> None:
         self._captures.clear()
         self._step_idx = 0
-        for lbl in (self.lbl_tl, self.lbl_r, self.lbl_d):
+        for lbl in (self.lbl_tl, self.lbl_tr, self.lbl_bl):
             lbl.setText("—")
         self._refresh_prompt()
         self._refresh_summary()
@@ -253,8 +273,8 @@ class CalibrateDialog(QDialog):
         self._step_idx -= 1
         step = _STEPS[self._step_idx]
         self._captures.pop(step, None)
-        {"tl": self.lbl_tl, "r": self.lbl_r,
-         "d": self.lbl_d}[step].setText("—")
+        {"tl": self.lbl_tl, "tr": self.lbl_tr,
+         "bl": self.lbl_bl}[step].setText("—")
         self._refresh_prompt()
         self._refresh_summary()
 
@@ -263,11 +283,14 @@ class CalibrateDialog(QDialog):
         c = self._captures
         if not all(k in c for k in _STEPS):
             return
-        cw = c["r"][0] - c["tl"][0]
-        ch = c["d"][1] - c["tl"][1]
+        cw, ch = self._cell_size()
+        # Round to 2dp so user.yaml stays readable; the sweep rounds
+        # to int at the point of use so cumulative drift stays below
+        # 1px even for large grids.
         self.cfg.set(self._k("grid", "origin"),
                      [c["tl"][0], c["tl"][1]])
-        self.cfg.set(self._k("grid", "cell_size"), [cw, ch])
+        self.cfg.set(self._k("grid", "cell_size"),
+                     [round(cw, 2), round(ch, 2)])
 
         anchor = self.anchor_combo.currentText()
         if anchor and anchor != "(disabled)":
@@ -299,6 +322,16 @@ class CalibrateDialog(QDialog):
         else:
             self.cfg.set(
                 self._k("origin_relative_to_window"), None)
+
+        # Persist calibration so it survives restart.
+        try:
+            self.cfg.save_user_overrides([
+                self._k("grid", "origin"),
+                self._k("grid", "cell_size"),
+                self._k("origin_relative_to_window"),
+            ])
+        except Exception:
+            pass
 
         self._unbind_hotkey()
         self.accept()

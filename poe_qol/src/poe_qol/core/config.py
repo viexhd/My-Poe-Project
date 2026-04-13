@@ -30,6 +30,11 @@ class ConfigStore:
         self.root = Path(root)
         self.default_path = self.root / "config" / "default.yaml"
         self.profile_dir = self.root / "config" / "profiles"
+        # Per-user overrides written by the UI (calibration, last-used
+        # slot selection, etc.). Layered on top of default + profile so
+        # calibration survives restarts without touching the shared
+        # profile file.
+        self.user_overrides_path = self.root / "config" / "user.yaml"
         self._data: dict[str, Any] = {}
         self.reload()
 
@@ -41,6 +46,9 @@ class ConfigStore:
             if p.exists():
                 override = yaml.safe_load(p.read_text()) or {}
                 default = _deep_merge(default, override)
+        if self.user_overrides_path.exists():
+            user = yaml.safe_load(self.user_overrides_path.read_text()) or {}
+            default = _deep_merge(default, user)
         self._data = default
 
     # dot-path getter: cfg.get("macros.life_flask.key")
@@ -64,6 +72,28 @@ class ConfigStore:
         self.profile_dir.mkdir(parents=True, exist_ok=True)
         path = self.profile_dir / f"{name}.yaml"
         path.write_text(yaml.safe_dump(self._data, sort_keys=False))
+
+    def save_user_overrides(self, paths: list[str]) -> None:
+        """Persist the current values of the given dot-paths to
+        ``config/user.yaml`` so they survive a restart. Merges into
+        any existing overrides without dropping unrelated keys."""
+        existing: dict[str, Any] = {}
+        if self.user_overrides_path.exists():
+            existing = yaml.safe_load(self.user_overrides_path.read_text()) or {}
+        for path in paths:
+            value = self.get(path)
+            cur = existing
+            parts = path.split(".")
+            for p in parts[:-1]:
+                nxt = cur.get(p)
+                if not isinstance(nxt, dict):
+                    nxt = {}
+                    cur[p] = nxt
+                cur = nxt
+            cur[parts[-1]] = value
+        self.user_overrides_path.parent.mkdir(parents=True, exist_ok=True)
+        self.user_overrides_path.write_text(
+            yaml.safe_dump(existing, sort_keys=False))
 
     @property
     def data(self) -> dict[str, Any]:

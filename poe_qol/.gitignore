@@ -7,3 +7,6 @@ logs/coords.json
 build/
 dist/
 .venv/
+
+# Per-user overrides written by the UI (calibration, etc.)
+config/user.yaml

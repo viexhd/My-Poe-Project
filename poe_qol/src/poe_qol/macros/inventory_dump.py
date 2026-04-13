@@ -32,7 +32,10 @@ from ..engine.registry import register
 def grid_points(origin, cell, cols, rows) -> list[list[tuple[int, int]]]:
     ox, oy = origin
     cw, ch = cell
-    return [[(ox + c * cw, oy + r * ch) for c in range(cols)]
+    # Round at use time (cell size may be a float after full-grid
+    # calibration) so cumulative drift stays sub-pixel.
+    return [[(int(round(ox + c * cw)), int(round(oy + r * ch)))
+             for c in range(cols)]
             for r in range(rows)]
 
 

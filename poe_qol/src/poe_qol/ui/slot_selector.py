@@ -350,9 +350,9 @@ class _OverlayWindow(QWidget):
         cell = self.cfg.get(self._k("grid", "cell_size"), [53, 55])
         rows = self.cfg.get(self._k("grid", "rows"), 5)
         cols = self.cfg.get(self._k("grid", "cols"), 12)
-        pad = max(cell) // 2 + 4
-        w = cols * cell[0] + pad * 2
-        h = rows * cell[1] + pad * 2
+        pad = int(max(cell)) // 2 + 4
+        w = int(round(cols * cell[0])) + pad * 2
+        h = int(round(rows * cell[1])) + pad * 2
         self._origin_cache = origin
         self.setGeometry(origin[0] - pad, origin[1] - pad, w, h)
 
@@ -361,16 +361,18 @@ class _OverlayWindow(QWidget):
         self.update()
 
     def paintEvent(self, _e) -> None:  # noqa: N802
-        origin = getattr(self, "_origin_cache", None) or self._current_origin()
         cell = self.cfg.get(self._k("grid", "cell_size"), [53, 55])
-        pad = max(cell) // 2 + 4
-        size = min(cell)
+        pad = int(max(cell)) // 2 + 4
+        size = int(min(cell))
         p = QPainter(self)
         p.setRenderHint(QPainter.RenderHint.Antialiasing)
         fill = QColor(80, 220, 140, 90)
         border = QColor(80, 220, 140, 220)
         p.setBrush(fill); p.setPen(border)
+        # Draw in widget-local coords. Cell size may be a float after
+        # full-grid calibration; round each highlight independently so
+        # accumulated drift stays below 1px on the far corner.
         for r, c in self._selected:
-            lx = origin[0] + c * cell[0] - (origin[0] - pad) - size // 2
-            ly = origin[1] + r * cell[1] - (origin[1] - pad) - size // 2
+            lx = int(round(pad + c * cell[0] - size / 2))
+            ly = int(round(pad + r * cell[1] - size / 2))
             p.drawRoundedRect(lx, ly, size, size, 4, 4)
