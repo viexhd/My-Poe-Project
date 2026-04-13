@@ -1,48 +1,191 @@
-# External mapping: human-readable map mod name -> PoE trade stat id.
-# Names are matched case-insensitively and by substring (so "no regen"
-# finds "no regeneration"). Add more as you need them — the trade
-# builder only knows what lives in this file.
+# =====================================================================
+# Map mod catalogue consumed by the visual Map Search tab.
 #
-# Stat ids below are representative values from the PoE trade stat
-# list. If PoE changes an id, update it here — no code change needed.
+# Structure (version 2):
+#
+#   item_types:   list of map-type presets shown in the UI dropdown.
+#   categories:   ordered grouping used to lay out the toggle grid.
+#   mods:         flat list of map mods addressable by a stable `id`.
+#                 Each entry carries the PoE trade stat id so the query
+#                 builder can convert selections into an exclusion
+#                 filter without any code change.
+#   presets:      named sets of mod ids the user can one-click apply.
+#
+# If PoE changes a stat id (they occasionally do between leagues), edit
+# this file — no Python changes required.
+# =====================================================================
 
-version: 1
+version: 2
 
-map_mods:
-  # regen / recovery
-  "no regeneration": "explicit.stat_3464419871"
-  "less recovery": "explicit.stat_789117908"
+# ---------------------------------------------------------------------
+# Item types (populates the "Item Type" dropdown). The trade query
+# builder consumes these fields directly:
+#   category:  -> filters.type_filters.filters.category.option
+#   map_tier:  -> filters.map_filters.filters.map_tier.{min,max}
+# Leave map_tier out to search any tier.
+# ---------------------------------------------------------------------
+item_types:
+  - {id: map_t17,  name: "Map (Tier 17)", category: map, map_tier: {min: 17, max: 17}}
+  - {id: map_t16,  name: "Map (Tier 16)", category: map, map_tier: {min: 16, max: 16}}
+  - {id: map_t15,  name: "Map (Tier 15)", category: map, map_tier: {min: 15, max: 15}}
+  - {id: map_t14,  name: "Map (Tier 14)", category: map, map_tier: {min: 14, max: 14}}
+  - {id: map_t13,  name: "Map (Tier 13)", category: map, map_tier: {min: 13, max: 13}}
+  - {id: map_any,  name: "Map (Any Tier)", category: map}
+  - {id: any,      name: "Any Item"}
 
-  # reflect
-  "reflect elemental damage": "explicit.stat_3464901540"
-  "reflect physical damage": "explicit.stat_3999401129"
+# ---------------------------------------------------------------------
+# Categories — render order follows this list.
+# ---------------------------------------------------------------------
+categories:
+  - {id: build_breaking, name: "Build Breaking", color: "#c0392b"}
+  - {id: dangerous,      name: "Dangerous",      color: "#8e44ad"}
+  - {id: annoying,       name: "Annoying",       color: "#e67e22"}
+  - {id: positive,       name: "Positive",       color: "#27ae60"}
 
-  # curses / auras
-  "temporal chains": "explicit.stat_2326202293"
-  "vulnerability": "explicit.stat_1813451228"
-  "elemental weakness": "explicit.stat_558910024"
+# ---------------------------------------------------------------------
+# Mods. `tags` feed the search bar (substring match against id, name
+# and each tag). The UI also filters on name.
+# ---------------------------------------------------------------------
+mods:
+  # ---- Build Breaking ----
+  - id: no_regen
+    name: "No Regeneration"
+    category: build_breaking
+    stat_id: "explicit.stat_3464419871"
+    tags: [regen, rf, recovery]
+  - id: less_recovery
+    name: "Players have less Recovery Rate"
+    category: build_breaking
+    stat_id: "explicit.stat_789117908"
+    tags: [recovery, flask, rf, life]
+  - id: cannot_leech
+    name: "Cannot Leech Life/Mana"
+    category: build_breaking
+    stat_id: "explicit.stat_3117614341"
+    tags: [leech, sustain]
+  - id: reduced_aura
+    name: "Players have reduced Aura Effect"
+    category: build_breaking
+    stat_id: "explicit.stat_4263864489"
+    tags: [aura, support]
+  - id: blood_magic
+    name: "Players are Cursed with Blood Magic"
+    category: build_breaking
+    stat_id: "explicit.stat_690707482"
+    tags: [blood_magic, mana, curse]
 
-  # extra damage types
-  "monsters deal extra fire": "explicit.stat_3390848861"
-  "monsters deal extra cold": "explicit.stat_1558003619"
-  "monsters deal extra lightning": "explicit.stat_4224965099"
-  "monsters deal extra chaos": "explicit.stat_897996059"
+  # ---- Dangerous ----
+  - id: reflect_ele
+    name: "Monsters reflect Elemental Damage"
+    category: dangerous
+    stat_id: "explicit.stat_3464901540"
+    tags: [reflect, elemental]
+  - id: reflect_phys
+    name: "Monsters reflect Physical Damage"
+    category: dangerous
+    stat_id: "explicit.stat_3999401129"
+    tags: [reflect, physical]
+  - id: extra_fire
+    name: "Monsters deal extra Fire Damage"
+    category: dangerous
+    stat_id: "explicit.stat_3390848861"
+    tags: [elemental, fire, extra_damage]
+  - id: extra_cold
+    name: "Monsters deal extra Cold Damage"
+    category: dangerous
+    stat_id: "explicit.stat_1558003619"
+    tags: [elemental, cold, extra_damage]
+  - id: extra_lightning
+    name: "Monsters deal extra Lightning Damage"
+    category: dangerous
+    stat_id: "explicit.stat_4224965099"
+    tags: [elemental, lightning, extra_damage]
+  - id: extra_chaos
+    name: "Monsters deal extra Chaos Damage"
+    category: dangerous
+    stat_id: "explicit.stat_897996059"
+    tags: [chaos, extra_damage]
+  - id: vulnerability
+    name: "Players are Cursed with Vulnerability"
+    category: dangerous
+    stat_id: "explicit.stat_1813451228"
+    tags: [curse, physical, vuln]
+  - id: elemental_weakness
+    name: "Players are Cursed with Elemental Weakness"
+    category: dangerous
+    stat_id: "explicit.stat_558910024"
+    tags: [curse, elemental, ele_weak]
 
-  # misc dangerous
-  "cannot leech": "explicit.stat_3117614341"
-  "reduced aura effect": "explicit.stat_4263864489"
-  "players have less recovery": "explicit.stat_789117908"
+  # ---- Annoying ----
+  - id: temporal_chains
+    name: "Players are Cursed with Temporal Chains"
+    category: annoying
+    stat_id: "explicit.stat_2326202293"
+    tags: [curse, slow, flicker, tc]
+  - id: chilled_ground
+    name: "Area has patches of Chilled Ground"
+    category: annoying
+    stat_id: "explicit.stat_2551600084"
+    tags: [ground, cold]
+  - id: burning_ground
+    name: "Area has patches of Burning Ground"
+    category: annoying
+    stat_id: "explicit.stat_1429891772"
+    tags: [ground, fire]
+  - id: shocked_ground
+    name: "Area has patches of Shocked Ground"
+    category: annoying
+    stat_id: "explicit.stat_742529963"
+    tags: [ground, lightning]
+  - id: desecrated_ground
+    name: "Area has patches of Desecrated Ground"
+    category: annoying
+    stat_id: "explicit.stat_2683550658"
+    tags: [ground, chaos]
 
-# Aliases resolve short user input to canonical keys above.
-aliases:
-  "reflect": "reflect elemental damage"
-  "ele reflect": "reflect elemental damage"
-  "phys reflect": "reflect physical damage"
-  "no regen": "no regeneration"
-  "tc": "temporal chains"
-  "vuln": "vulnerability"
-  "ele weak": "elemental weakness"
-  "extra fire": "monsters deal extra fire"
-  "extra cold": "monsters deal extra cold"
-  "extra lightning": "monsters deal extra lightning"
-  "extra chaos": "monsters deal extra chaos"
+  # ---- Positive (informational filters; rarely excluded but kept so
+  # the UI can show them and so future weighting features can surface
+  # maps that *have* them). ----
+  - id: pack_size
+    name: "+% Monster Pack Size"
+    category: positive
+    stat_id: "explicit.stat_3868982400"
+    tags: [pack, density]
+  - id: item_rarity
+    name: "+% Item Rarity"
+    category: positive
+    stat_id: "explicit.stat_3190223614"
+    tags: [rarity, iir]
+  - id: item_quantity
+    name: "+% Item Quantity"
+    category: positive
+    stat_id: "explicit.stat_884586851"
+    tags: [quantity, iiq]
+
+# ---------------------------------------------------------------------
+# Presets: one-click sets of excluded mod ids. The UI renders a button
+# per preset; clicking it replaces the current selection.
+# ---------------------------------------------------------------------
+presets:
+  - id: rf_safe
+    name: "RF Safe"
+    description: "Excludes mods that brick Righteous Fire."
+    excluded: [no_regen, less_recovery, blood_magic, reduced_aura]
+  - id: flicker_safe
+    name: "Flicker Safe"
+    description: "Excludes slow / anti-flicker mods."
+    excluded: [temporal_chains]
+  - id: no_reflect
+    name: "No Reflect"
+    description: "Excludes both reflect mods."
+    excluded: [reflect_ele, reflect_phys]
+  - id: boss_safe
+    name: "Boss Safe"
+    description: "Safer for boss fights: no reflect, no TC, no extra ele."
+    excluded:
+      [reflect_ele, reflect_phys, temporal_chains,
+       extra_fire, extra_cold, extra_lightning]
+  - id: leech_build
+    name: "Leech Build"
+    description: "For leech-reliant builds: exclude no-leech + recovery mods."
+    excluded: [cannot_leech, no_regen, less_recovery]

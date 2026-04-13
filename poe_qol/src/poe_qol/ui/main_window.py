@@ -4,7 +4,7 @@ Tabs:
     * Macros      – global toggle, per-macro on/off + hotkey editor
     * Inventory   – visual 12×5 slot selector + slot profiles + overlay
     * Map Stash   – visual 12×6 slot selector for the Map stash tab
-    * Trade       – regex→trade link generator
+    * Map Search  – visual map mod exclusion → pathofexile.com/trade link
 """
 from __future__ import annotations
 
@@ -17,8 +17,8 @@ from PySide6.QtWidgets import (
 from ..core.config import ConfigStore
 from ..core.state import AppState
 from ..engine.scheduler import Scheduler
+from .map_search_widget import MapSearchWidget
 from .slot_selector import SlotSelector
-from .trade_widget import TradeWidget
 
 
 class MainWindow(QMainWindow):
@@ -30,7 +30,10 @@ class MainWindow(QMainWindow):
         self.scheduler = scheduler
 
         self.setWindowTitle("PoE QoL")
-        self.resize(520, 560)
+        # Larger default so the Map Search tab's category grid fits
+        # without scrolling. The Macros / slot-selector tabs are happy
+        # with less space but benefit from the extra width too.
+        self.resize(760, 680)
 
         tabs = QTabWidget()
         self.setCentralWidget(tabs)
@@ -38,7 +41,7 @@ class MainWindow(QMainWindow):
         tabs.addTab(self._build_macros_tab(), "Macros")
         tabs.addTab(self._build_inventory_tab(), "Inventory")
         tabs.addTab(self._build_map_stash_tab(), "Map Stash")
-        tabs.addTab(TradeWidget(cfg), "Trade")
+        tabs.addTab(MapSearchWidget(cfg), "Map Search")
 
         # Status bar
         self.status = QLabel("Idle")

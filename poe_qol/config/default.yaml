@@ -117,16 +117,20 @@ macros:
       show:    ctrl+alt+v
     save_to: logs/coords.json
 
-# ---- Trade link generator ----
+# ---- Map-search trade link generator ----
+# Drives the "Map Search" tab. Modifier and preset data live in
+# `mod_map_file` (config/map_mods.yaml, v2 schema).
 trade:
   league: Standard
-  item_category: map           # null to disable the type filter
   status: online               # online | onlineleague | any
+  item_type_id: map_t16        # default dropdown selection (see map_mods.yaml)
   mod_map_file: config/map_mods.yaml
-  url_mode: copy               # copy | post
+  # "post" POSTs to the PoE trade API and uses the canonical hash URL
+  # pathofexile.com/trade expects. "copy" builds a debug ?q= URL that
+  # is useful for inspection but won't render on the site.
+  url_mode: post
   base_site: https://www.pathofexile.com/trade/search
   base_api:  https://www.pathofexile.com/api/trade/search
-  # quick presets that can be loaded from the UI
-  presets:
-    "Safe mapping":      "!reflect elemental damage|!reflect physical damage, !no regen"
-    "Boss-only":         "!reflect elemental damage, !reflect physical damage, !temporal chains"
+  # Currently-selected (= excluded) mod ids. Persisted by the UI into
+  # config/user.yaml so your last selection survives a restart.
+  excluded_mods: []
