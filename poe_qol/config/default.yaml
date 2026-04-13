@@ -1,0 +1,65 @@
+# =====================================================================
+# Default configuration. Profile files under config/profiles/ override
+# any of these keys. Nothing in code should hard-code a value that
+# exists here.
+# =====================================================================
+
+app:
+  profile: mapping           # active profile name (file under profiles/)
+  global_enabled: true       # master on/off switch
+  log_level: INFO
+
+hotkeys:
+  emergency_stop: f12        # hard kill-switch, never disabled
+  toggle_global: pause       # flips app.global_enabled
+  toggle_ui:     f2          # show/hide main window
+
+# ---- Input simulation tuning ----
+input:
+  backend: pydirectinput     # pydirectinput | pynput
+  pre_click_settle_ms: 30    # sleep after MouseMove before click
+  click_jitter_px: 1         # random +/- px jitter on MoveTo
+
+# ---- Vision pipeline ----
+vision:
+  capture_backend: mss
+  default_monitor: 1
+  template_dir: assets/templates
+  match_threshold: 0.86
+
+# ---- Macros ----
+# Each macro declares the same top-level keys: enabled, hotkey, config.
+macros:
+
+  life_flask:
+    enabled: true
+    hotkey: "`"              # backtick toggles
+    key: "1"
+    interval_ms: [4000, 5000]   # [min, max] – uniform random
+    tooltip_ms: 1500
+
+  inventory_dump:
+    enabled: true
+    hotkeys:
+      left:  f1
+      right: f2
+    # Option A: fixed grid parameters (matches inventory.ahk defaults)
+    grid:
+      origin: [1988, 612]    # top-left slot centre, screen coords
+      cell_size: [53, 55]    # (w, h) spacing between slots
+      cols: 12
+      rows: 5
+      pattern: serpentine    # serpentine | row_major
+    # Option B: vision-anchored origin – if this template resolves, it
+    # overrides grid.origin.
+    anchor_template: null    # e.g. "inventory_anchor.png"
+    modifier: ctrl           # hold this key for the entire sweep
+    click_delay_ms: [30, 80]
+    show_progress: true
+
+  coord_picker:
+    enabled: true
+    hotkeys:
+      capture: ctrl+alt+c
+      show:    ctrl+alt+v
+    save_to: logs/coords.json
