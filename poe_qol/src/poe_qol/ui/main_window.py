@@ -74,14 +74,26 @@ class MainWindow(QMainWindow):
                 self.cfg.set(f"macros.{n}.enabled", bool(s)))
             row.addWidget(cb)
 
-            if macro.HOTKEYS:
-                action, path = next(iter(macro.HOTKEYS.items()))
+            # One line-edit per action in HOTKEYS so macros with both
+            # `left` and `right` bindings (inventory_dump,
+            # map_stash_dump) are fully editable from the UI.
+            for action, path in macro.HOTKEYS.items():
+                row.addWidget(QLabel(action))
                 le = QLineEdit(self.cfg.get(path, "") or "")
-                le.setPlaceholderText(f"{action} hotkey")
+                le.setMaximumWidth(90)
+                le.setPlaceholderText(action)
                 le.editingFinished.connect(
                     lambda le=le, p=path: self._rebind(p, le.text()))
                 row.addWidget(le)
             v.addLayout(row)
+
+        # Surface any hotkey collision the router detected at
+        # bind-time so the user sees it instead of only learning
+        # about it via the logs.
+        self.conflict_label = QLabel("")
+        self.conflict_label.setStyleSheet("color:#e80;font-weight:bold;")
+        self.conflict_label.setWordWrap(True)
+        v.addWidget(self.conflict_label)
 
         v.addWidget(QLabel("Life flask interval (ms)"))
         lo, hi = self.cfg.get("macros.life_flask.interval_ms", [4000, 5000])
@@ -145,10 +157,29 @@ class MainWindow(QMainWindow):
             self.master.setChecked(want)
             self.master.blockSignals(False)
 
-        active = [n for n, m in self.scheduler.macros.items() if m.running]
+        # Surface any hotkey conflict reported by the router.
+        conflict = getattr(self.scheduler.hotkeys, "last_conflict", None)
+        if conflict and self.conflict_label.text() != conflict:
+            self.conflict_label.setText(conflict)
+        elif not conflict and self.conflict_label.text():
+            self.conflict_label.setText("")
+
         if self.state.stop_event.is_set():
             self.status.setText(
                 "EMERGENCY STOP — re-check 'Global enabled' to resume")
-        else:
-            self.status.setText(
-                "Active: " + (", ".join(active) if active else "—"))
+            return
+
+        # Progress-aware active list. Macros expose `progress` as
+        # (current, total) during a sweep so we can render
+        # "inventory_dump 5/60" instead of just the name.
+        parts: list[str] = []
+        for n, m in self.scheduler.macros.items():
+            if not m.running:
+                continue
+            prog = getattr(m, "progress", None)
+            if prog:
+                parts.append(f"{n} {prog[0]}/{prog[1]}")
+            else:
+                parts.append(n)
+        self.status.setText(
+            "Active: " + (", ".join(parts) if parts else "—"))

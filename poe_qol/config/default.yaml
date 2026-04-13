@@ -12,7 +12,10 @@ app:
 hotkeys:
   emergency_stop: f12        # hard kill-switch, never disabled
   toggle_global: pause       # flips app.global_enabled
-  toggle_ui:     f2          # show/hide main window
+  # show/hide main window. Disabled by default because F2 collided
+  # with inventory_dump.hotkeys.right; pick a free combo (e.g.
+  # "ctrl+shift+h") to turn it on once toggle_ui is wired up.
+  toggle_ui:     null
 
 # ---- Input simulation tuning ----
 input:

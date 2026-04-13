@@ -36,6 +36,9 @@ class Macro(ABC):
         self.log = logging.getLogger(f"poe_qol.macros.{self.NAME}")
         self._stop = threading.Event()
         self._thread: threading.Thread | None = None
+        # Optional progress tuple (current, total) set by the sweep
+        # loop so the UI status bar can render "Inventory 5/60".
+        self.progress: tuple[int, int] | None = None
 
     # ---- lifecycle ----
     @property

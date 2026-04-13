@@ -159,10 +159,23 @@ class SlotSelector(QWidget):
         sel = sorted(self._current_selected())
         self.cfg.set(self._k("selected_slots"), [list(p) for p in sel])
         self.cfg.set(self._k("active_slot_profile"), None)
+        self._persist_selection()
         self._refresh_summary()
         if self._overlay:
             self._overlay.refresh(sel)
         self.on_change()
+
+    def _persist_selection(self) -> None:
+        """Write the current slot selection + active profile to
+        config/user.yaml so they survive restart, matching how
+        calibration is persisted."""
+        try:
+            self.cfg.save_user_overrides([
+                self._k("selected_slots"),
+                self._k("active_slot_profile"),
+            ])
+        except Exception:
+            pass
 
     def _on_toggle(self, r: int, c: int) -> None:
         self._commit()
@@ -230,6 +243,7 @@ class SlotSelector(QWidget):
     def _on_profile_changed(self, name: str) -> None:
         if not name or name == "(none)":
             self.cfg.set(self._k("active_slot_profile"), None)
+            self._persist_selection()
             return
         path = self._profile_dir() / f"{name}.yaml"
         if not path.exists():
@@ -241,6 +255,7 @@ class SlotSelector(QWidget):
         self.cfg.set(self._k("active_slot_profile"), name)
         self.cfg.set(self._k("selected_slots"),
                      [list(s) for s in sorted(slots)])
+        self._persist_selection()
         self._refresh_summary()
         if self._overlay:
             self._overlay.refresh(sorted(slots))

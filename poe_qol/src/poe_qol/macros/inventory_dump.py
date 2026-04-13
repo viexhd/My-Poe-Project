@@ -210,6 +210,7 @@ class GridDumpMacro(Macro):
         if self.should_abort():
             return
 
+        self.progress = (0, total)
         if modifier:
             self.sender.key_down(modifier)
         try:
@@ -217,6 +218,7 @@ class GridDumpMacro(Macro):
                 if self.should_abort():
                     self.log.warning("sweep aborted at %d/%d", i, total)
                     break
+                self.progress = (i, total)
                 self.sender.click(x, y, button=button)
                 # Interruptible sleep so F12 aborts mid-delay.
                 if self._stop.wait(random.randint(lo, hi) / 1000.0):
@@ -227,6 +229,7 @@ class GridDumpMacro(Macro):
                 # Always release the modifier, even on abort, so the
                 # user doesn't end up with a stuck Ctrl key.
                 self.sender.key_up(modifier)
+            self.progress = None
 
 
 # ---------------------------------------------------------------------------
