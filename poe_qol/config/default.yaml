@@ -56,6 +56,13 @@ macros:
     modifier: ctrl           # hold this key for the entire sweep
     click_delay_ms: [30, 80]
     show_progress: true
+    # Per-slot filtering. If `selected_slots` is non-empty, ONLY those
+    # slots are clicked. Format: [[row, col], ...]  (0-indexed).
+    # The UI Visual Slot Selector writes into this key.
+    selected_slots: []
+    # Optional named slot profiles, switch by setting `active_slot_profile`.
+    active_slot_profile: null   # e.g. "maps_only"
+    slot_profile_dir: config/slot_profiles
 
   coord_picker:
     enabled: true
@@ -63,3 +70,17 @@ macros:
       capture: ctrl+alt+c
       show:    ctrl+alt+v
     save_to: logs/coords.json
+
+# ---- Trade link generator ----
+trade:
+  league: Standard
+  item_category: map           # null to disable the type filter
+  status: online               # online | onlineleague | any
+  mod_map_file: config/map_mods.yaml
+  url_mode: copy               # copy | post
+  base_site: https://www.pathofexile.com/trade/search
+  base_api:  https://www.pathofexile.com/api/trade/search
+  # quick presets that can be loaded from the UI
+  presets:
+    "Safe mapping":      "!reflect elemental damage|!reflect physical damage, !no regen"
+    "Boss-only":         "!reflect elemental damage, !reflect physical damage, !temporal chains"

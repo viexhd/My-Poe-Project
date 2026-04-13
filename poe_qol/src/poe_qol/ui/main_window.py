@@ -1,24 +1,23 @@
-"""Minimal but functional Qt UI.
+"""Tabbed Qt main window.
 
-Shows:
-    * Master enable toggle
-    * Per-macro enable checkbox
-    * Per-macro hotkey field (click-to-capture)
-    * Life-flask interval slider pair
-    * Emergency stop button
-    * Status bar with currently running macros
+Tabs:
+    * Macros      – global toggle, per-macro on/off + hotkey editor
+    * Inventory   – visual 12×5 slot selector + slot profiles + overlay
+    * Trade       – regex→trade link generator
 """
 from __future__ import annotations
 
 from PySide6.QtCore import Qt, QTimer
 from PySide6.QtWidgets import (
     QCheckBox, QHBoxLayout, QLabel, QLineEdit, QMainWindow, QPushButton,
-    QSpinBox, QVBoxLayout, QWidget,
+    QSpinBox, QTabWidget, QVBoxLayout, QWidget,
 )
 
 from ..core.config import ConfigStore
 from ..core.state import AppState
 from ..engine.scheduler import Scheduler
+from .slot_selector import SlotSelector
+from .trade_widget import TradeWidget
 
 
 class MainWindow(QMainWindow):
@@ -30,49 +29,60 @@ class MainWindow(QMainWindow):
         self.scheduler = scheduler
 
         self.setWindowTitle("PoE QoL")
-        self.resize(360, 420)
+        self.resize(520, 560)
 
-        root = QWidget()
-        self.setCentralWidget(root)
-        v = QVBoxLayout(root)
+        tabs = QTabWidget()
+        self.setCentralWidget(tabs)
 
-        # Master switch
+        tabs.addTab(self._build_macros_tab(), "Macros")
+        tabs.addTab(self._build_inventory_tab(), "Inventory")
+        tabs.addTab(TradeWidget(cfg), "Trade")
+
+        # Status bar
+        self.status = QLabel("Idle")
+        self.status.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        self.statusBar().addPermanentWidget(self.status, 1)
+
+        self._timer = QTimer(self)
+        self._timer.timeout.connect(self._refresh_status)
+        self._timer.start(400)
+
+    # ---- macros tab ----
+    def _build_macros_tab(self) -> QWidget:
+        w = QWidget()
+        v = QVBoxLayout(w)
+
         self.master = QCheckBox("Global enabled")
-        self.master.setChecked(cfg.get("app.global_enabled", True))
+        self.master.setChecked(self.cfg.get("app.global_enabled", True))
         self.master.stateChanged.connect(self._on_master)
         v.addWidget(self.master)
 
-        # Emergency stop
         self.estop = QPushButton("EMERGENCY STOP (F12)")
-        self.estop.setStyleSheet("background:#c00;color:white;font-weight:bold")
-        self.estop.clicked.connect(scheduler.emergency_stop)
+        self.estop.setStyleSheet(
+            "background:#c00;color:white;font-weight:bold;padding:8px")
+        self.estop.clicked.connect(self.scheduler.emergency_stop)
         v.addWidget(self.estop)
 
-        # Per-macro rows
-        self._macro_widgets: dict[str, QCheckBox] = {}
-        for name, macro in scheduler.macros.items():
+        for name, macro in self.scheduler.macros.items():
             row = QHBoxLayout()
             cb = QCheckBox(name)
             cb.setChecked(macro.enabled)
-            cb.stateChanged.connect(lambda s, n=name:
-                                    self.cfg.set(f"macros.{n}.enabled", bool(s)))
-            self._macro_widgets[name] = cb
+            cb.stateChanged.connect(
+                lambda s, n=name:
+                self.cfg.set(f"macros.{n}.enabled", bool(s)))
             row.addWidget(cb)
 
-            # hotkey editor (one representative hotkey per macro)
             if macro.HOTKEYS:
                 action, path = next(iter(macro.HOTKEYS.items()))
                 le = QLineEdit(self.cfg.get(path, "") or "")
                 le.setPlaceholderText(f"{action} hotkey")
                 le.editingFinished.connect(
-                    lambda le=le, p=path: self._rebind(p, le.text())
-                )
+                    lambda le=le, p=path: self._rebind(p, le.text()))
                 row.addWidget(le)
             v.addLayout(row)
 
-        # Life-flask interval tuners (example of config-driven knob)
         v.addWidget(QLabel("Life flask interval (ms)"))
-        lo, hi = cfg.get("macros.life_flask.interval_ms", [4000, 5000])
+        lo, hi = self.cfg.get("macros.life_flask.interval_ms", [4000, 5000])
         row = QHBoxLayout()
         self.lo_spin = QSpinBox(); self.lo_spin.setRange(500, 30000); self.lo_spin.setValue(lo)
         self.hi_spin = QSpinBox(); self.hi_spin.setRange(500, 30000); self.hi_spin.setValue(hi)
@@ -81,15 +91,12 @@ class MainWindow(QMainWindow):
         row.addWidget(self.lo_spin); row.addWidget(self.hi_spin)
         v.addLayout(row)
 
-        # Status bar
-        self.status = QLabel("Idle")
-        self.status.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        v.addWidget(self.status)
+        v.addStretch(1)
+        return w
 
-        # Periodic status refresh
-        self._timer = QTimer(self)
-        self._timer.timeout.connect(self._refresh_status)
-        self._timer.start(400)
+    # ---- inventory tab ----
+    def _build_inventory_tab(self) -> QWidget:
+        return SlotSelector(self.cfg)
 
     # ---- slots ----
     def _on_master(self, s: int) -> None:
@@ -102,7 +109,6 @@ class MainWindow(QMainWindow):
 
     def _rebind(self, cfg_path: str, combo: str) -> None:
         self.cfg.set(cfg_path, combo)
-        # re-bind everything (cheap & simple)
         self.scheduler.hotkeys.unbind_all()
         self.scheduler._bind_hotkeys()
 

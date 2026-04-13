@@ -1,0 +1,48 @@
+# External mapping: human-readable map mod name -> PoE trade stat id.
+# Names are matched case-insensitively and by substring (so "no regen"
+# finds "no regeneration"). Add more as you need them — the trade
+# builder only knows what lives in this file.
+#
+# Stat ids below are representative values from the PoE trade stat
+# list. If PoE changes an id, update it here — no code change needed.
+
+version: 1
+
+map_mods:
+  # regen / recovery
+  "no regeneration": "explicit.stat_3464419871"
+  "less recovery": "explicit.stat_789117908"
+
+  # reflect
+  "reflect elemental damage": "explicit.stat_3464901540"
+  "reflect physical damage": "explicit.stat_3999401129"
+
+  # curses / auras
+  "temporal chains": "explicit.stat_2326202293"
+  "vulnerability": "explicit.stat_1813451228"
+  "elemental weakness": "explicit.stat_558910024"
+
+  # extra damage types
+  "monsters deal extra fire": "explicit.stat_3390848861"
+  "monsters deal extra cold": "explicit.stat_1558003619"
+  "monsters deal extra lightning": "explicit.stat_4224965099"
+  "monsters deal extra chaos": "explicit.stat_897996059"
+
+  # misc dangerous
+  "cannot leech": "explicit.stat_3117614341"
+  "reduced aura effect": "explicit.stat_4263864489"
+  "players have less recovery": "explicit.stat_789117908"
+
+# Aliases resolve short user input to canonical keys above.
+aliases:
+  "reflect": "reflect elemental damage"
+  "ele reflect": "reflect elemental damage"
+  "phys reflect": "reflect physical damage"
+  "no regen": "no regeneration"
+  "tc": "temporal chains"
+  "vuln": "vulnerability"
+  "ele weak": "elemental weakness"
+  "extra fire": "monsters deal extra fire"
+  "extra cold": "monsters deal extra cold"
+  "extra lightning": "monsters deal extra lightning"
+  "extra chaos": "monsters deal extra chaos"
