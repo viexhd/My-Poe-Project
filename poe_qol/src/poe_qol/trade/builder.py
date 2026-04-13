@@ -160,47 +160,94 @@ def _copy_url(query: dict, *, base: str) -> str:
     return f"{base.rstrip('/')}/{urllib.parse.quote(league)}?q={q}"
 
 
+_UNKNOWN_STAT_RE = __import__("re").compile(
+    r"Unknown stat provided:\s*([A-Za-z0-9_.]+)")
+
+
+def _strip_stat_id(payload: dict, stat_id: str) -> bool:
+    """Remove every reference to ``stat_id`` from a trade payload.
+
+    Returns True if anything was removed. Walks the ``query.stats`` list
+    and drops matching inner filters; also drops any stat group that
+    ends up empty so the API doesn't choke on an empty-filters group.
+    """
+    stats = payload.get("query", {}).get("stats")
+    if not isinstance(stats, list):
+        return False
+    removed = False
+    new_stats: list[dict] = []
+    for group in stats:
+        filters = group.get("filters") or []
+        kept = [f for f in filters if f.get("id") != stat_id]
+        if len(kept) != len(filters):
+            removed = True
+        if kept:
+            group["filters"] = kept
+            new_stats.append(group)
+        # else: drop the whole group (empty filter list = 400)
+    payload["query"]["stats"] = new_stats
+    return removed
+
+
 def _post_url(query: dict, *, base_api: str, base_site: str,
               timeout: float = 10.0) -> str:
     import urllib.error
     import urllib.request  # stdlib – avoid a new dep
     league = query.get("__league__", "Standard")
     payload = {k: v for k, v in query.items() if not k.startswith("__")}
-    data = json.dumps(payload).encode("utf-8")
     url = f"{base_api.rstrip('/')}/{urllib.parse.quote(league)}"
     # PoE's trade API sits behind Cloudflare and rejects generic
     # User-Agents with 400 / 403. A realistic browser UA gets through.
-    req = urllib.request.Request(
-        url, data=data,
-        headers={
-            "Content-Type": "application/json",
-            "Accept": "application/json",
-            "Origin": "https://www.pathofexile.com",
-            "Referer": f"{base_site.rstrip('/')}/{urllib.parse.quote(league)}",
-            "User-Agent": (
-                "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
-                "AppleWebKit/537.36 (KHTML, like Gecko) "
-                "Chrome/124.0.0.0 Safari/537.36"),
-        },
-        method="POST",
-    )
-    try:
-        with urllib.request.urlopen(req, timeout=timeout) as resp:
-            body = json.loads(resp.read().decode("utf-8"))
-    except urllib.error.HTTPError as e:
-        # Surface the server's error message – usually "invalid query"
-        # with a hint about which stat field is bad.
+    headers = {
+        "Content-Type": "application/json",
+        "Accept": "application/json",
+        "Origin": "https://www.pathofexile.com",
+        "Referer": f"{base_site.rstrip('/')}/{urllib.parse.quote(league)}",
+        "User-Agent": (
+            "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
+            "AppleWebKit/537.36 (KHTML, like Gecko) "
+            "Chrome/124.0.0.0 Safari/537.36"),
+    }
+
+    # Auto-retry loop: if the API rejects a single stat as "unknown"
+    # (map_mods.yaml got a stale id between leagues), strip it and
+    # resend. Cap at len(stats) attempts so we can't spin forever.
+    dropped: list[str] = []
+    for _ in range(16):
+        data = json.dumps(payload).encode("utf-8")
+        req = urllib.request.Request(url, data=data, headers=headers,
+                                     method="POST")
         try:
-            detail = e.read().decode("utf-8", errors="replace")
-        except Exception:
-            detail = ""
+            with urllib.request.urlopen(req, timeout=timeout) as resp:
+                body = json.loads(resp.read().decode("utf-8"))
+            break
+        except urllib.error.HTTPError as e:
+            try:
+                detail = e.read().decode("utf-8", errors="replace")
+            except Exception:
+                detail = ""
+            m = _UNKNOWN_STAT_RE.search(detail) if e.code == 400 else None
+            if m and _strip_stat_id(payload, m.group(1)):
+                dropped.append(m.group(1))
+                log.warning("trade API rejected %s; retrying without it",
+                            m.group(1))
+                continue
+            raise RuntimeError(
+                f"trade API {e.code} {e.reason}: {detail[:400]}"
+            ) from e
+    else:  # pragma: no cover – only hit if every stat is stale
         raise RuntimeError(
-            f"trade API {e.code} {e.reason}: {detail[:400]}"
-        ) from e
+            "trade API kept rejecting stats; giving up after stripping: "
+            + ", ".join(dropped))
+
     hash_id = body.get("id")
     if not hash_id:
         raise RuntimeError(f"trade API returned no id: {body!r}")
-    return f"{base_site.rstrip('/')}/{urllib.parse.quote(league)}/{hash_id}"
+    final = f"{base_site.rstrip('/')}/{urllib.parse.quote(league)}/{hash_id}"
+    if dropped:
+        log.warning("dropped stale stat ids from query: %s",
+                    ", ".join(dropped))
+    return final
 
 
 def build_url(query: dict, *, mode: str = "copy",

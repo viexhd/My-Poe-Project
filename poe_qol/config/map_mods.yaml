@@ -51,17 +51,17 @@ mods:
   - id: no_regen
     name: "No Regeneration"
     category: build_breaking
-    stat_id: "explicit.stat_3464419871"
+    stat_id: "explicit.stat_1910157106"
     tags: [regen, rf, recovery]
   - id: less_recovery
     name: "Players have less Recovery Rate"
     category: build_breaking
-    stat_id: "explicit.stat_789117908"
+    stat_id: "explicit.stat_4181072906"
     tags: [recovery, flask, rf, life]
   - id: cannot_leech
     name: "Cannot Leech Life/Mana"
     category: build_breaking
-    stat_id: "explicit.stat_3117614341"
+    stat_id: "explicit.stat_1140978125"
     tags: [leech, sustain]
   - id: reduced_aura
     name: "Players have reduced Aura Effect"
@@ -78,37 +78,37 @@ mods:
   - id: reflect_ele
     name: "Monsters reflect Elemental Damage"
     category: dangerous
-    stat_id: "explicit.stat_3464901540"
+    stat_id: "explicit.stat_2764017512"
     tags: [reflect, elemental]
   - id: reflect_phys
     name: "Monsters reflect Physical Damage"
     category: dangerous
-    stat_id: "explicit.stat_3999401129"
+    stat_id: "explicit.stat_3464419871"
     tags: [reflect, physical]
   - id: extra_fire
     name: "Monsters deal extra Fire Damage"
     category: dangerous
-    stat_id: "explicit.stat_3390848861"
+    stat_id: "explicit.stat_1497673356"
     tags: [elemental, fire, extra_damage]
   - id: extra_cold
     name: "Monsters deal extra Cold Damage"
     category: dangerous
-    stat_id: "explicit.stat_1558003619"
+    stat_id: "explicit.stat_3448216135"
     tags: [elemental, cold, extra_damage]
   - id: extra_lightning
     name: "Monsters deal extra Lightning Damage"
     category: dangerous
-    stat_id: "explicit.stat_4224965099"
+    stat_id: "explicit.stat_3416853625"
     tags: [elemental, lightning, extra_damage]
   - id: extra_chaos
     name: "Monsters deal extra Chaos Damage"
     category: dangerous
-    stat_id: "explicit.stat_897996059"
+    stat_id: "explicit.stat_1840747977"
     tags: [chaos, extra_damage]
   - id: vulnerability
     name: "Players are Cursed with Vulnerability"
     category: dangerous
-    stat_id: "explicit.stat_1813451228"
+    stat_id: "explicit.stat_1366534040"
     tags: [curse, physical, vuln]
   - id: elemental_weakness
     name: "Players are Cursed with Elemental Weakness"
@@ -125,27 +125,27 @@ mods:
   - id: chilled_ground
     name: "Area has patches of Chilled Ground"
     category: annoying
-    stat_id: "explicit.stat_2551600084"
+    stat_id: "explicit.stat_349586058"
     tags: [ground, cold]
   - id: burning_ground
     name: "Area has patches of Burning Ground"
     category: annoying
-    stat_id: "explicit.stat_1429891772"
+    stat_id: "explicit.stat_133340941"
     tags: [ground, fire]
   - id: shocked_ground
     name: "Area has patches of Shocked Ground"
     category: annoying
-    stat_id: "explicit.stat_742529963"
+    stat_id: "explicit.stat_3246076198"
     tags: [ground, lightning]
   - id: desecrated_ground
     name: "Area has patches of Desecrated Ground"
     category: annoying
-    stat_id: "explicit.stat_2683550658"
+    stat_id: "explicit.stat_3577222856"
     tags: [ground, chaos]
 
-  # ---- Positive (informational filters; rarely excluded but kept so
-  # the UI can show them and so future weighting features can surface
-  # maps that *have* them). ----
+  # ---- Positive (informational; mostly surfaced for display. The trade
+  # site actually filters these via map_filters, not stats, so selecting
+  # them just prints a hint — they're ignored by the query builder.) ----
   - id: pack_size
     name: "+% Monster Pack Size"
     category: positive
