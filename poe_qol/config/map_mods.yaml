@@ -18,6 +18,25 @@
 version: 2
 
 # ---------------------------------------------------------------------
+# Search defaults applied to every query until the user changes them
+# in the UI. Each field maps 1:1 onto the PoE trade site filters:
+#
+#   rarity       -> type_filters.filters.rarity.option
+#                   ("rare" | "magic" | "normal" | "nonunique" |
+#                    "unique" | "uniquefoil" | null)
+#   corrupted    -> misc_filters.filters.corrupted.option
+#                   ("true" | "false" | null)
+#   map_num_mods -> map_filters.filters.map_num_mods.{min,max}
+#                   (null/missing disables the bound)
+# ---------------------------------------------------------------------
+defaults:
+  rarity: nonunique        # non-unique = normal / magic / rare
+  corrupted: "true"        # corrupted only
+  map_num_mods:
+    min: 8                 # 8+ mods (leave max null for "or more")
+    max: null
+
+# ---------------------------------------------------------------------
 # Item types (populates the "Item Type" dropdown). The trade query
 # builder consumes these fields directly:
 #   category:  -> filters.type_filters.filters.category.option

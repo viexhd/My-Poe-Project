@@ -78,12 +78,37 @@ class Preset:
 
 
 @dataclass
+class SearchDefaults:
+    """Default trade-site filters (rarity / corrupted / map_num_mods).
+
+    Each field is either a plain value or ``None`` to mean "don't add
+    the filter at all". Stored verbatim and applied by
+    :func:`build_map_query`; individual calls may override.
+    """
+    rarity: str | None = None            # "rare" / "nonunique" / ...
+    corrupted: str | None = None         # "true" / "false" / None
+    # {"min": 8, "max": None}
+    map_num_mods: dict[str, int | None] | None = None
+
+    @classmethod
+    def from_yaml(cls, raw: dict | None) -> "SearchDefaults":
+        raw = raw or {}
+        return cls(
+            rarity=raw.get("rarity"),
+            corrupted=(str(raw["corrupted"]).lower()
+                       if raw.get("corrupted") is not None else None),
+            map_num_mods=raw.get("map_num_mods"),
+        )
+
+
+@dataclass
 class MapDataset:
     """Loaded, validated view of ``config/map_mods.yaml`` (v2)."""
     item_types: list[ItemType]
     categories: list[Category]
     mods: list[Mod]
     presets: list[Preset]
+    defaults: SearchDefaults = field(default_factory=SearchDefaults)
 
     # ---- lookups ----
     def mod(self, mod_id: str) -> Mod | None:
@@ -127,8 +152,9 @@ class MapDataset:
             excluded=list(p.get("excluded") or []),
             description=p.get("description", ""),
         ) for p in presets_raw]
+        defaults = SearchDefaults.from_yaml(data.get("defaults"))
         return cls(item_types=item_types, categories=categories,
-                   mods=mods, presets=presets)
+                   mods=mods, presets=presets, defaults=defaults)
 
 
 # ---------------------------------------------------------------------------
@@ -155,11 +181,31 @@ def _exclusion_group(mods: Iterable[Mod]) -> dict[str, Any] | None:
     }
 
 
+_UNSET = object()
+
+
+def _num_range(spec: dict[str, int | None] | None) -> dict[str, int] | None:
+    """Turn a {"min": int|None, "max": int|None} spec into the payload
+    shape PoE expects. Drops keys whose value is None; returns None if
+    nothing remains so callers can skip the filter entirely."""
+    if not spec:
+        return None
+    out: dict[str, int] = {}
+    if spec.get("min") is not None:
+        out["min"] = int(spec["min"])
+    if spec.get("max") is not None:
+        out["max"] = int(spec["max"])
+    return out or None
+
+
 def build_map_query(dataset: MapDataset, *,
                     item_type_id: str,
                     excluded_mod_ids: Iterable[str],
                     league: str = "Standard",
-                    status: str = "online") -> dict[str, Any]:
+                    status: str = "online",
+                    rarity: Any = _UNSET,
+                    corrupted: Any = _UNSET,
+                    map_num_mods: Any = _UNSET) -> dict[str, Any]:
     """Assemble a trade POST payload.
 
     Layout matches what pathofexile.com/trade emits for
@@ -167,19 +213,45 @@ def build_map_query(dataset: MapDataset, *,
 
         query.status                              – online / any
         query.filters.type_filters.filters.category.option = "map"
+        query.filters.type_filters.filters.rarity.option
         query.filters.map_filters.filters.map_tier.{min,max}
+        query.filters.map_filters.filters.map_num_mods.{min,max}
+        query.filters.misc_filters.filters.corrupted.option
         query.stats = [ count(max=0) over all excluded mod stat ids ]
         sort.price = asc
+
+    ``rarity`` / ``corrupted`` / ``map_num_mods`` each default to the
+    dataset's ``defaults`` block; pass ``None`` to turn a filter off
+    explicitly, or a value to override the default.
     """
+    # Resolve defaults: explicit arg wins; otherwise use dataset default.
+    if rarity is _UNSET:
+        rarity = dataset.defaults.rarity
+    if corrupted is _UNSET:
+        corrupted = dataset.defaults.corrupted
+    if map_num_mods is _UNSET:
+        map_num_mods = dataset.defaults.map_num_mods
+
     item = dataset.item_type(item_type_id)
     filters: dict[str, Any] = {}
     if item and item.category:
         filters.setdefault("type_filters", {"filters": {}})
         filters["type_filters"]["filters"]["category"] = {
             "option": item.category}
+    if rarity:
+        filters.setdefault("type_filters", {"filters": {}})
+        filters["type_filters"]["filters"]["rarity"] = {"option": rarity}
     if item and item.map_tier:
         filters.setdefault("map_filters", {"filters": {}})
         filters["map_filters"]["filters"]["map_tier"] = dict(item.map_tier)
+    num_mods_range = _num_range(map_num_mods)
+    if num_mods_range:
+        filters.setdefault("map_filters", {"filters": {}})
+        filters["map_filters"]["filters"]["map_num_mods"] = num_mods_range
+    if corrupted:
+        filters.setdefault("misc_filters", {"filters": {}})
+        filters["misc_filters"]["filters"]["corrupted"] = {
+            "option": str(corrupted).lower()}
 
     # Resolve excluded mod ids -> Mod objects, dropping unknowns.
     unknown: list[str] = []

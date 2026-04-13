@@ -22,8 +22,8 @@ from PySide6.QtCore import Qt
 from PySide6.QtGui import QGuiApplication
 from PySide6.QtWidgets import (
     QComboBox, QFrame, QGridLayout, QHBoxLayout, QLabel, QLineEdit,
-    QMessageBox, QPushButton, QScrollArea, QSizePolicy, QVBoxLayout,
-    QWidget,
+    QMessageBox, QPushButton, QScrollArea, QSizePolicy, QSpinBox,
+    QVBoxLayout, QWidget,
 )
 
 from ..core.config import ConfigStore
@@ -38,6 +38,24 @@ _CFG_EXCLUDED = "trade.excluded_mods"
 _CFG_ITEM_TYPE = "trade.item_type_id"
 _CFG_LEAGUE = "trade.league"
 _CFG_STATUS = "trade.status"
+_CFG_RARITY = "trade.rarity"
+_CFG_CORRUPTED = "trade.corrupted"
+_CFG_MIN_MODS = "trade.map_num_mods_min"
+
+# Dropdowns: label shown to user -> trade-API value (None disables).
+_RARITY_OPTIONS: list[tuple[str, str | None]] = [
+    ("Any",        None),
+    ("Non-Unique", "nonunique"),
+    ("Rare",       "rare"),
+    ("Magic",      "magic"),
+    ("Normal",     "normal"),
+    ("Unique",     "unique"),
+]
+_CORRUPTED_OPTIONS: list[tuple[str, str | None]] = [
+    ("Any",        None),
+    ("Corrupted",  "true"),
+    ("Not corrupted", "false"),
+]
 
 
 class _ModButton(QPushButton):
@@ -98,6 +116,39 @@ class MapSearchWidget(QWidget):
             lambda v: self.cfg.set(_CFG_STATUS, v))
         top.addWidget(self.status_box, 1)
         root.addLayout(top)
+
+        # ---- filter row: rarity / corrupted / min mods ----
+        # Default values are populated in _apply_dataset_defaults() once
+        # the dataset has loaded — we need its .defaults block to know
+        # what to preselect.
+        filt = QHBoxLayout()
+        filt.addWidget(QLabel("Rarity:"))
+        self.rarity_box = QComboBox()
+        for label, value in _RARITY_OPTIONS:
+            self.rarity_box.addItem(label, value)
+        self.rarity_box.currentIndexChanged.connect(
+            lambda _=0: self._persist_filter(
+                _CFG_RARITY, self.rarity_box.currentData()))
+        filt.addWidget(self.rarity_box, 1)
+
+        filt.addWidget(QLabel("Corrupted:"))
+        self.corrupted_box = QComboBox()
+        for label, value in _CORRUPTED_OPTIONS:
+            self.corrupted_box.addItem(label, value)
+        self.corrupted_box.currentIndexChanged.connect(
+            lambda _=0: self._persist_filter(
+                _CFG_CORRUPTED, self.corrupted_box.currentData()))
+        filt.addWidget(self.corrupted_box, 1)
+
+        filt.addWidget(QLabel("Min mods:"))
+        self.min_mods_spin = QSpinBox()
+        self.min_mods_spin.setRange(0, 12)
+        self.min_mods_spin.setSpecialValueText("Any")  # 0 shown as "Any"
+        self.min_mods_spin.valueChanged.connect(
+            lambda v: self._persist_filter(
+                _CFG_MIN_MODS, v if v > 0 else None))
+        filt.addWidget(self.min_mods_spin, 1)
+        root.addLayout(filt)
 
         # ---- search bar ----
         search_row = QHBoxLayout()
@@ -170,6 +221,7 @@ class MapSearchWidget(QWidget):
         self._populate_type_box()
         self._populate_categories()
         self._populate_presets()
+        self._apply_dataset_defaults()
 
     def _populate_type_box(self) -> None:
         assert self.dataset is not None
@@ -346,9 +398,40 @@ class MapSearchWidget(QWidget):
     def _persist_prefs(self) -> None:
         try:
             self.cfg.save_user_overrides(
-                [_CFG_EXCLUDED, _CFG_ITEM_TYPE, _CFG_LEAGUE, _CFG_STATUS])
+                [_CFG_EXCLUDED, _CFG_ITEM_TYPE, _CFG_LEAGUE, _CFG_STATUS,
+                 _CFG_RARITY, _CFG_CORRUPTED, _CFG_MIN_MODS])
         except Exception:
             log.exception("failed to persist trade prefs")
+
+    def _persist_filter(self, key: str, value) -> None:
+        self.cfg.set(key, value)
+        self._persist_prefs()
+
+    def _apply_dataset_defaults(self) -> None:
+        """Seed rarity / corrupted / min-mods widgets from the user's
+        saved value, falling back to ``dataset.defaults``. Called once
+        after the dataset loads."""
+        if not self.dataset:
+            return
+        d = self.dataset.defaults
+
+        rarity = self.cfg.get(_CFG_RARITY, d.rarity)
+        idx = self.rarity_box.findData(rarity)
+        self.rarity_box.blockSignals(True)
+        self.rarity_box.setCurrentIndex(idx if idx >= 0 else 0)
+        self.rarity_box.blockSignals(False)
+
+        corrupted = self.cfg.get(_CFG_CORRUPTED, d.corrupted)
+        idx = self.corrupted_box.findData(corrupted)
+        self.corrupted_box.blockSignals(True)
+        self.corrupted_box.setCurrentIndex(idx if idx >= 0 else 0)
+        self.corrupted_box.blockSignals(False)
+
+        default_min = (d.map_num_mods or {}).get("min") or 0
+        saved_min = self.cfg.get(_CFG_MIN_MODS, default_min)
+        self.min_mods_spin.blockSignals(True)
+        self.min_mods_spin.setValue(int(saved_min or 0))
+        self.min_mods_spin.blockSignals(False)
 
     # -----------------------------------------------------------------
     # Actions
@@ -357,12 +440,16 @@ class MapSearchWidget(QWidget):
         if not self.dataset:
             return None
         item_type_id = self.type_box.currentData() or "map_t16"
+        min_mods = self.min_mods_spin.value()
         return build_map_query(
             self.dataset,
             item_type_id=item_type_id,
             excluded_mod_ids=self._selected_ids(),
             league=self.cfg.get(_CFG_LEAGUE, "Standard"),
             status=self.cfg.get(_CFG_STATUS, "online"),
+            rarity=self.rarity_box.currentData(),
+            corrupted=self.corrupted_box.currentData(),
+            map_num_mods={"min": min_mods, "max": None} if min_mods > 0 else None,
         )
 
     def _build_url(self, mode: str) -> str | None:
