@@ -13,6 +13,14 @@ if not exist ".venv\Scripts\python.exe" (
     ".venv\Scripts\python.exe" -m pip install -r requirements.txt    || goto :fail
 )
 
+rem Ensure the poe_qol package itself is installed (editable) so
+rem `python -m poe_qol` resolves. This is a no-op on subsequent runs.
+".venv\Scripts\python.exe" -c "import poe_qol" 2>nul
+if errorlevel 1 (
+    echo [poe_qol] Installing package in editable mode...
+    ".venv\Scripts\python.exe" -m pip install -e . || goto :fail
+)
+
 ".venv\Scripts\python.exe" -m poe_qol
 set EXITCODE=%ERRORLEVEL%
 
