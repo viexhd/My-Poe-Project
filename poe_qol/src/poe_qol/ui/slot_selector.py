@@ -29,10 +29,13 @@ CELL_SIZE_PX = 28   # button size in the selector (purely cosmetic)
 
 
 class SlotSelector(QWidget):
-    def __init__(self, cfg: ConfigStore, on_change: Callable[[], None] | None = None):
+    def __init__(self, cfg: ConfigStore,
+                 on_change: Callable[[], None] | None = None,
+                 scheduler=None):
         super().__init__()
         self.cfg = cfg
         self.on_change = on_change or (lambda: None)
+        self._scheduler = scheduler
         self._buttons: dict[tuple[int, int], QToolButton] = {}
         self._overlay: _OverlayWindow | None = None
         self._build()
@@ -236,12 +239,20 @@ class SlotSelector(QWidget):
     # ---- calibration ----
     def _on_calibrate(self) -> None:
         from .calibrate_dialog import CalibrateDialog
-        dlg = CalibrateDialog(self.cfg, self)
-        if dlg.exec():
-            # refresh overlay if visible so it reflects new origin/cell
-            if self._overlay:
-                self._overlay._reposition()
-                self._overlay.refresh(self._current_selected())
+        # Release the app's own hotkeys while the dialog is up so the
+        # capture key (default F8) can't collide with anything.
+        scheduler = getattr(self, "_scheduler", None)
+        if scheduler:
+            scheduler.hotkeys.unbind_all()
+        try:
+            dlg = CalibrateDialog(self.cfg, self)
+            if dlg.exec():
+                if self._overlay:
+                    self._overlay._reposition()
+                    self._overlay.refresh(self._current_selected())
+        finally:
+            if scheduler:
+                scheduler._bind_hotkeys()
 
     # ---- overlay ----
     def _on_overlay_toggle(self, on: bool) -> None:

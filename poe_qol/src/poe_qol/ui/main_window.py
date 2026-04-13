@@ -96,7 +96,7 @@ class MainWindow(QMainWindow):
 
     # ---- inventory tab ----
     def _build_inventory_tab(self) -> QWidget:
-        return SlotSelector(self.cfg)
+        return SlotSelector(self.cfg, scheduler=self.scheduler)
 
     # ---- slots ----
     def _on_master(self, s: int) -> None:
