@@ -72,15 +72,15 @@ class CalibrateDialog(QDialog):
         self._hotkey_combo = "f8"
         self._build()
 
-    def _k(self, *parts: str) -> str:
-        return ".".join((self.cfg_path, *parts))
-
         self.captured.connect(self._on_captured)
         self._cursor_timer = QTimer(self)
         self._cursor_timer.timeout.connect(self._tick_cursor)
         self._cursor_timer.start(50)
 
         self._bind_hotkey(self._hotkey_combo)
+
+    def _k(self, *parts: str) -> str:
+        return ".".join((self.cfg_path, *parts))
 
     # ---- construction ----
     def _build(self) -> None:
