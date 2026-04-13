@@ -118,8 +118,14 @@ class MainWindow(QMainWindow):
 
     # ---- slots ----
     def _on_master(self, s: int) -> None:
-        self.cfg.set("app.global_enabled", bool(s))
-        self.state.set("global_enabled", bool(s))
+        on = bool(s)
+        self.cfg.set("app.global_enabled", on)
+        self.state.set("global_enabled", on)
+        # Re-enabling clears any latched emergency-stop so macros can
+        # actually fire again. Without this the app looks healthy but
+        # every macro.guard() still returns False.
+        if on:
+            self.state.clear_emergency()
 
     def _on_interval(self) -> None:
         self.cfg.set("macros.life_flask.interval_ms",
@@ -131,5 +137,18 @@ class MainWindow(QMainWindow):
         self.scheduler._bind_hotkeys()
 
     def _refresh_status(self) -> None:
+        # Keep the master checkbox in sync with state so an F12 press
+        # (which flips global_enabled off) is visible in the UI.
+        want = bool(self.cfg.get("app.global_enabled", True))
+        if self.master.isChecked() != want:
+            self.master.blockSignals(True)
+            self.master.setChecked(want)
+            self.master.blockSignals(False)
+
         active = [n for n, m in self.scheduler.macros.items() if m.running]
-        self.status.setText("Active: " + (", ".join(active) if active else "—"))
+        if self.state.stop_event.is_set():
+            self.status.setText(
+                "EMERGENCY STOP — re-check 'Global enabled' to resume")
+        else:
+            self.status.setText(
+                "Active: " + (", ".join(active) if active else "—"))

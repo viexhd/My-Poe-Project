@@ -12,7 +12,6 @@ Originally derived from `inventory.ahk` + `poe mini project/autoclicker.cpp`.
 from __future__ import annotations
 
 import random
-import time
 from pathlib import Path
 from typing import Iterable
 
@@ -176,7 +175,11 @@ class GridDumpMacro(Macro):
             if self.should_abort():
                 return
             self.sender.click(x, y, button="left")
-            time.sleep(delay_ms / 1000.0)
+            # Interruptible sleep: unblocks the moment emergency_stop
+            # (F12) fires so the sweep aborts instantly instead of
+            # racing out the remaining delay.
+            if self._stop.wait(delay_ms / 1000.0):
+                return
 
     # ---- core ----
     def _sweep(self, button: str) -> None:
@@ -215,9 +218,14 @@ class GridDumpMacro(Macro):
                     self.log.warning("sweep aborted at %d/%d", i, total)
                     break
                 self.sender.click(x, y, button=button)
-                time.sleep(random.randint(lo, hi) / 1000.0)
+                # Interruptible sleep so F12 aborts mid-delay.
+                if self._stop.wait(random.randint(lo, hi) / 1000.0):
+                    self.log.warning("sweep aborted at %d/%d", i, total)
+                    break
         finally:
             if modifier:
+                # Always release the modifier, even on abort, so the
+                # user doesn't end up with a stuck Ctrl key.
                 self.sender.key_up(modifier)
 
 

@@ -56,9 +56,24 @@ class Scheduler:
     # ---- actions exposed to the UI / hotkeys ----
     def emergency_stop(self) -> None:
         log.warning("EMERGENCY STOP")
-        self.state.emergency_stop()
+        # Signal every macro to abort cooperatively. `Macro._stop` is
+        # the per-sweep flag that the interruptible waits inside the
+        # sweep loop poll, so this takes effect immediately.
         for m in self.macros.values():
             m.stop()
+        # Release every modifier a running sweep might have been
+        # holding down. Without this, Ctrl stays pressed after F12
+        # and the user's next normal click is a Ctrl+click.
+        for k in ("ctrl", "shift", "alt"):
+            try:
+                self.sender.key_up(k)
+            except Exception:
+                log.exception("failed to release %s on emergency stop", k)
+        # Trip the global kill-switch + flip master off so nothing new
+        # starts. The UI master checkbox clears both when re-checked,
+        # which is how the user resumes.
+        self.state.emergency_stop()
+        self.cfg.set("app.global_enabled", False)
 
     def toggle_global(self) -> None:
         cur = self.cfg.get("app.global_enabled", True)
