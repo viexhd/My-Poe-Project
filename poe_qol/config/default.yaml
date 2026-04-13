@@ -121,7 +121,7 @@ macros:
 # Drives the "Map Search" tab. Modifier and preset data live in
 # `mod_map_file` (config/map_mods.yaml, v2 schema).
 trade:
-  league: Standard
+  league: Mirage
   status: online               # online | onlineleague | any
   item_type_id: map_t16        # default dropdown selection (see map_mods.yaml)
   mod_map_file: config/map_mods.yaml

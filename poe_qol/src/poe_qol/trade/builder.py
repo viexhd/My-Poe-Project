@@ -162,19 +162,41 @@ def _copy_url(query: dict, *, base: str) -> str:
 
 def _post_url(query: dict, *, base_api: str, base_site: str,
               timeout: float = 10.0) -> str:
+    import urllib.error
     import urllib.request  # stdlib – avoid a new dep
     league = query.get("__league__", "Standard")
     payload = {k: v for k, v in query.items() if not k.startswith("__")}
     data = json.dumps(payload).encode("utf-8")
     url = f"{base_api.rstrip('/')}/{urllib.parse.quote(league)}"
+    # PoE's trade API sits behind Cloudflare and rejects generic
+    # User-Agents with 400 / 403. A realistic browser UA gets through.
     req = urllib.request.Request(
         url, data=data,
-        headers={"Content-Type": "application/json",
-                 "User-Agent": "poe_qol/0.1"},
+        headers={
+            "Content-Type": "application/json",
+            "Accept": "application/json",
+            "Origin": "https://www.pathofexile.com",
+            "Referer": f"{base_site.rstrip('/')}/{urllib.parse.quote(league)}",
+            "User-Agent": (
+                "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
+                "AppleWebKit/537.36 (KHTML, like Gecko) "
+                "Chrome/124.0.0.0 Safari/537.36"),
+        },
         method="POST",
     )
-    with urllib.request.urlopen(req, timeout=timeout) as resp:
-        body = json.loads(resp.read().decode("utf-8"))
+    try:
+        with urllib.request.urlopen(req, timeout=timeout) as resp:
+            body = json.loads(resp.read().decode("utf-8"))
+    except urllib.error.HTTPError as e:
+        # Surface the server's error message – usually "invalid query"
+        # with a hint about which stat field is bad.
+        try:
+            detail = e.read().decode("utf-8", errors="replace")
+        except Exception:
+            detail = ""
+        raise RuntimeError(
+            f"trade API {e.code} {e.reason}: {detail[:400]}"
+        ) from e
     hash_id = body.get("id")
     if not hash_id:
         raise RuntimeError(f"trade API returned no id: {body!r}")

@@ -137,9 +137,14 @@ class MapDataset:
 
 def _exclusion_group(mods: Iterable[Mod]) -> dict[str, Any] | None:
     """Return a count(max=0) stat group over the given mods, or None
-    if ``mods`` is empty."""
-    filters = [{"id": m.stat_id, "value": {"min": 1},
-                "disabled": False} for m in mods]
+    if ``mods`` is empty.
+
+    The *inner* filters only carry ``id`` + ``disabled`` — no
+    ``value`` — because map-mod stats are boolean "has it / doesn't"
+    flags. Attaching ``value: {min: 1}`` makes the trade API reject
+    the POST with HTTP 400.
+    """
+    filters = [{"id": m.stat_id, "disabled": False} for m in mods]
     if not filters:
         return None
     return {
