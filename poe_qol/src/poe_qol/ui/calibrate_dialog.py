@@ -48,7 +48,7 @@ def _cursor() -> Optional[tuple[int, int]]:
 # Order of capture steps.
 _STEPS = ("tl", "r", "d")
 _STEP_LABEL = {
-    "tl": "Hover the TOP-LEFT inventory slot, then press the hotkey.",
+    "tl": "Hover the TOP-LEFT slot, then press the hotkey.",
     "r":  "Hover the slot ONE COLUMN to the right of top-left, then press the hotkey.",
     "d":  "Hover the slot ONE ROW below top-left, then press the hotkey.",
 }
@@ -58,16 +58,22 @@ class CalibrateDialog(QDialog):
     # Cross-thread signal — the keyboard hook fires on its own thread.
     captured = Signal()
 
-    def __init__(self, cfg: ConfigStore, parent=None):
+    def __init__(self, cfg: ConfigStore, parent=None,
+                 cfg_path: str = "macros.inventory_dump"):
         super().__init__(parent)
         self.cfg = cfg
-        self.setWindowTitle("Calibrate inventory grid")
+        self.cfg_path = cfg_path
+        title = cfg_path.rsplit(".", 1)[-1].replace("_", " ")
+        self.setWindowTitle(f"Calibrate {title} grid")
         self.setModal(True)
         self._captures: dict[str, tuple[int, int]] = {}
         self._step_idx: int = 0
         self._hotkey_handle = None
         self._hotkey_combo = "f8"
         self._build()
+
+    def _k(self, *parts: str) -> str:
+        return ".".join((self.cfg_path, *parts))
 
         self.captured.connect(self._on_captured)
         self._cursor_timer = QTimer(self)
@@ -259,9 +265,9 @@ class CalibrateDialog(QDialog):
             return
         cw = c["r"][0] - c["tl"][0]
         ch = c["d"][1] - c["tl"][1]
-        self.cfg.set("macros.inventory_dump.grid.origin",
+        self.cfg.set(self._k("grid", "origin"),
                      [c["tl"][0], c["tl"][1]])
-        self.cfg.set("macros.inventory_dump.grid.cell_size", [cw, ch])
+        self.cfg.set(self._k("grid", "cell_size"), [cw, ch])
 
         anchor = self.anchor_combo.currentText()
         if anchor and anchor != "(disabled)":
@@ -269,14 +275,14 @@ class CalibrateDialog(QDialog):
                 from ..vision.window import find_window
                 rect = find_window(
                     self.cfg.get(
-                        "macros.inventory_dump.window.title_pattern",
+                        self._k("window", "title_pattern"),
                         "Path of Exile"),
                     self.cfg.get(
-                        "macros.inventory_dump.window.class_pattern"),
+                        self._k("window", "class_pattern")),
                 )
                 if rect is None:
                     self.cfg.set(
-                        "macros.inventory_dump.origin_relative_to_window",
+                        self._k("origin_relative_to_window"),
                         None)
                     self.status.setText(
                         "Saved absolute origin. PoE window not detected, "
@@ -286,13 +292,13 @@ class CalibrateDialog(QDialog):
                     dx = c["tl"][0] - ax
                     dy = c["tl"][1] - ay
                     self.cfg.set(
-                        "macros.inventory_dump.origin_relative_to_window",
+                        self._k("origin_relative_to_window"),
                         {"anchor": anchor, "offset": [dx, dy]})
             except Exception:
                 pass
         else:
             self.cfg.set(
-                "macros.inventory_dump.origin_relative_to_window", None)
+                self._k("origin_relative_to_window"), None)
 
         self._unbind_hotkey()
         self.accept()

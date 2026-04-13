@@ -1,18 +1,21 @@
-"""Visual inventory slot selector.
+"""Visual grid slot selector – reusable across containers.
 
-Renders a rows×cols grid of toggle buttons. Selection is kept in sync
-with `macros.inventory_dump.selected_slots` in config. Profiles under
-`config/slot_profiles/` can be saved / loaded by name.
+Renders a rows×cols grid of toggle buttons rooted at any config path
+(`macros.inventory_dump`, `macros.map_stash_dump`, …). Selection is
+synced to `<cfg_path>.selected_slots`.
 
-Also exposes an overlay preview that mirrors the selection at real
-inventory coordinates (origin + cell_size from config), drawn as a
-frameless always-on-top Qt window. Useful to eyeball that the grid
-lines up with the game before you hit F1.
+Provides:
+    * Bulk select all/none/invert
+    * Save/load named slot profiles in `<cfg_path>.slot_profile_dir`
+    * Live overlay window highlighting the selected slots at real
+      screen coordinates (resolved via vision/window.py)
+    * Calibrate dialog (cursor + global hotkey)
+    * Dump button – fires the macro programmatically
 """
 from __future__ import annotations
 
 from pathlib import Path
-from typing import Callable
+from typing import Callable, Optional
 
 import yaml
 from PySide6.QtCore import Qt, QTimer
@@ -30,24 +33,34 @@ CELL_SIZE_PX = 28   # button size in the selector (purely cosmetic)
 
 class SlotSelector(QWidget):
     def __init__(self, cfg: ConfigStore,
+                 cfg_path: str = "macros.inventory_dump",
+                 title: str = "Inventory",
+                 macro=None,
                  on_change: Callable[[], None] | None = None,
                  scheduler=None):
         super().__init__()
         self.cfg = cfg
+        self.cfg_path = cfg_path
+        self.title = title
+        self.macro = macro
         self.on_change = on_change or (lambda: None)
         self._scheduler = scheduler
         self._buttons: dict[tuple[int, int], QToolButton] = {}
-        self._overlay: _OverlayWindow | None = None
+        self._overlay: Optional["_OverlayWindow"] = None
         self._build()
+
+    # ---- key helper ----
+    def _k(self, *parts: str) -> str:
+        return ".".join((self.cfg_path, *parts))
 
     # ---- construction ----
     def _build(self) -> None:
         v = QVBoxLayout(self)
 
-        rows = self.cfg.get("macros.inventory_dump.grid.rows", 5)
-        cols = self.cfg.get("macros.inventory_dump.grid.cols", 12)
+        rows = self.cfg.get(self._k("grid", "rows"), 5)
+        cols = self.cfg.get(self._k("grid", "cols"), 12)
 
-        header = QLabel(f"Inventory slots ({rows} × {cols})")
+        header = QLabel(f"{self.title} slots ({rows} × {cols})")
         header.setAlignment(Qt.AlignmentFlag.AlignCenter)
         v.addWidget(header)
 
@@ -56,7 +69,7 @@ class SlotSelector(QWidget):
         grid.setSpacing(2)
         grid.setContentsMargins(0, 0, 0, 0)
         selected = {tuple(s) for s in
-                    (self.cfg.get("macros.inventory_dump.selected_slots") or [])}
+                    (self.cfg.get(self._k("selected_slots")) or [])}
         for r in range(rows):
             for c in range(cols):
                 b = QToolButton()
@@ -70,7 +83,7 @@ class SlotSelector(QWidget):
                 self._buttons[(r, c)] = b
         v.addWidget(grid_w)
 
-        # Controls row: all / none / invert
+        # Bulk row
         ctl = QHBoxLayout()
         for label, fn in (("All", self._select_all),
                           ("None", self._clear),
@@ -80,7 +93,7 @@ class SlotSelector(QWidget):
             ctl.addWidget(btn)
         v.addLayout(ctl)
 
-        # Profile row: dropdown + save/load/delete
+        # Profile row
         prof = QHBoxLayout()
         self.prof_combo = QComboBox()
         self.prof_combo.setEditable(False)
@@ -95,7 +108,7 @@ class SlotSelector(QWidget):
             prof.addWidget(btn)
         v.addLayout(prof)
 
-        # Overlay + calibration row
+        # Overlay + calibrate row
         ov = QHBoxLayout()
         self.overlay_btn = QPushButton("Show overlay")
         self.overlay_btn.setCheckable(True)
@@ -110,9 +123,25 @@ class SlotSelector(QWidget):
         ov.addWidget(self.calibrate_btn, 1)
         v.addLayout(ov)
 
-        summary = QLabel()
-        self._summary = summary
-        v.addWidget(summary)
+        # Dump button
+        dump_row = QHBoxLayout()
+        self.dump_btn = QPushButton(f"Dump  ({self.title})")
+        self.dump_btn.setStyleSheet(
+            "background:#28a;color:white;font-weight:bold;padding:8px;")
+        self.dump_btn.setToolTip(
+            "Bring PoE to the foreground (focus-clicks the first slot a "
+            "couple of times) then Ctrl+Left-click every selected slot.")
+        self.dump_btn.clicked.connect(lambda: self._dump("left"))
+        dump_row.addWidget(self.dump_btn, 3)
+
+        self.dump_right_btn = QPushButton("Dump (Right)")
+        self.dump_right_btn.setToolTip("Same sweep but Ctrl+Right-click.")
+        self.dump_right_btn.clicked.connect(lambda: self._dump("right"))
+        dump_row.addWidget(self.dump_right_btn, 1)
+        v.addLayout(dump_row)
+
+        self._summary = QLabel()
+        v.addWidget(self._summary)
         self._refresh_summary()
 
     def _style_button(self, b: QToolButton) -> None:
@@ -128,10 +157,8 @@ class SlotSelector(QWidget):
 
     def _commit(self) -> None:
         sel = sorted(self._current_selected())
-        self.cfg.set("macros.inventory_dump.selected_slots",
-                     [list(p) for p in sel])
-        # switching out of profile mode when user hand-edits
-        self.cfg.set("macros.inventory_dump.active_slot_profile", None)
+        self.cfg.set(self._k("selected_slots"), [list(p) for p in sel])
+        self.cfg.set(self._k("active_slot_profile"), None)
         self._refresh_summary()
         if self._overlay:
             self._overlay.refresh(sel)
@@ -142,23 +169,17 @@ class SlotSelector(QWidget):
 
     def _select_all(self) -> None:
         for b in self._buttons.values():
-            b.blockSignals(True)
-            b.setChecked(True)
-            b.blockSignals(False)
+            b.blockSignals(True); b.setChecked(True); b.blockSignals(False)
         self._commit()
 
     def _clear(self) -> None:
         for b in self._buttons.values():
-            b.blockSignals(True)
-            b.setChecked(False)
-            b.blockSignals(False)
+            b.blockSignals(True); b.setChecked(False); b.blockSignals(False)
         self._commit()
 
     def _invert(self) -> None:
         for b in self._buttons.values():
-            b.blockSignals(True)
-            b.setChecked(not b.isChecked())
-            b.blockSignals(False)
+            b.blockSignals(True); b.setChecked(not b.isChecked()); b.blockSignals(False)
         self._commit()
 
     def _refresh_summary(self) -> None:
@@ -167,9 +188,28 @@ class SlotSelector(QWidget):
         self._summary.setText(f"{n} / {total} selected"
                               + ("  (all)" if n == total else ""))
 
+    # ---- dump ----
+    def _dump(self, button: str) -> None:
+        if self.macro is None:
+            QMessageBox.warning(self, "Dump",
+                                "No macro wired up for this tab.")
+            return
+        if not self.macro.enabled:
+            QMessageBox.information(
+                self, "Dump",
+                f"Macro '{self.macro.NAME}' is disabled. Enable it on the "
+                f"Macros tab first.")
+            return
+        if not self.cfg.get("app.global_enabled", True):
+            QMessageBox.information(
+                self, "Dump",
+                "Global enable is off. Toggle it on in the Macros tab.")
+            return
+        self.macro.trigger(button)
+
     # ---- profiles ----
     def _profile_dir(self) -> Path:
-        return Path(self.cfg.get("macros.inventory_dump.slot_profile_dir",
+        return Path(self.cfg.get(self._k("slot_profile_dir"),
                                  "config/slot_profiles"))
 
     def _refresh_profiles(self) -> None:
@@ -180,7 +220,7 @@ class SlotSelector(QWidget):
         if d.exists():
             for p in sorted(d.glob("*.yaml")):
                 self.prof_combo.addItem(p.stem)
-        active = self.cfg.get("macros.inventory_dump.active_slot_profile")
+        active = self.cfg.get(self._k("active_slot_profile"))
         if active:
             i = self.prof_combo.findText(active)
             if i >= 0:
@@ -189,7 +229,7 @@ class SlotSelector(QWidget):
 
     def _on_profile_changed(self, name: str) -> None:
         if not name or name == "(none)":
-            self.cfg.set("macros.inventory_dump.active_slot_profile", None)
+            self.cfg.set(self._k("active_slot_profile"), None)
             return
         path = self._profile_dir() / f"{name}.yaml"
         if not path.exists():
@@ -197,11 +237,9 @@ class SlotSelector(QWidget):
         data = yaml.safe_load(path.read_text()) or {}
         slots = {tuple(s) for s in data.get("slots") or []}
         for rc, b in self._buttons.items():
-            b.blockSignals(True)
-            b.setChecked(rc in slots)
-            b.blockSignals(False)
-        self.cfg.set("macros.inventory_dump.active_slot_profile", name)
-        self.cfg.set("macros.inventory_dump.selected_slots",
+            b.blockSignals(True); b.setChecked(rc in slots); b.blockSignals(False)
+        self.cfg.set(self._k("active_slot_profile"), name)
+        self.cfg.set(self._k("selected_slots"),
                      [list(s) for s in sorted(slots)])
         self._refresh_summary()
         if self._overlay:
@@ -239,13 +277,11 @@ class SlotSelector(QWidget):
     # ---- calibration ----
     def _on_calibrate(self) -> None:
         from .calibrate_dialog import CalibrateDialog
-        # Release the app's own hotkeys while the dialog is up so the
-        # capture key (default F8) can't collide with anything.
         scheduler = getattr(self, "_scheduler", None)
         if scheduler:
             scheduler.hotkeys.unbind_all()
         try:
-            dlg = CalibrateDialog(self.cfg, self)
+            dlg = CalibrateDialog(self.cfg, self, cfg_path=self.cfg_path)
             if dlg.exec():
                 if self._overlay:
                     self._overlay._reposition()
@@ -257,7 +293,7 @@ class SlotSelector(QWidget):
     # ---- overlay ----
     def _on_overlay_toggle(self, on: bool) -> None:
         if on:
-            self._overlay = _OverlayWindow(self.cfg)
+            self._overlay = _OverlayWindow(self.cfg, self.cfg_path)
             self._overlay.refresh(self._current_selected())
             self._overlay.show()
             self.overlay_btn.setText("Hide overlay")
@@ -269,11 +305,10 @@ class SlotSelector(QWidget):
 
 
 class _OverlayWindow(QWidget):
-    """Frameless always-on-top window that draws highlighted squares at
-    the game's real inventory coordinates. Click-through on best effort
-    — if the platform doesn't support it the user can just drag it away."""
+    """Frameless always-on-top window that draws highlighted squares
+    at the resolved screen coordinates of the configured grid."""
 
-    def __init__(self, cfg: ConfigStore):
+    def __init__(self, cfg: ConfigStore, cfg_path: str):
         super().__init__(None,
                          Qt.WindowType.FramelessWindowHint
                          | Qt.WindowType.WindowStaysOnTopHint
@@ -281,25 +316,25 @@ class _OverlayWindow(QWidget):
         self.setAttribute(Qt.WidgetAttribute.WA_TranslucentBackground)
         self.setAttribute(Qt.WidgetAttribute.WA_TransparentForMouseEvents, True)
         self.cfg = cfg
+        self.cfg_path = cfg_path
         self._selected: list[tuple[int, int]] = []
         self._timer = QTimer(self)
         self._timer.timeout.connect(self._reposition)
         self._timer.start(250)
         self._reposition()
 
+    def _k(self, *parts: str) -> str:
+        return ".".join((self.cfg_path, *parts))
+
     def _current_origin(self) -> tuple[int, int]:
-        """Mirror of InventoryDumpMacro._resolve_origin, sans template
-        match (we don't want to capture the screen at 4 Hz)."""
-        rel = self.cfg.get("macros.inventory_dump.origin_relative_to_window")
+        rel = self.cfg.get(self._k("origin_relative_to_window"))
         if rel:
             try:
                 from ..vision.window import find_window
                 rect = find_window(
-                    self.cfg.get(
-                        "macros.inventory_dump.window.title_pattern",
-                        "Path of Exile"),
-                    self.cfg.get(
-                        "macros.inventory_dump.window.class_pattern"),
+                    self.cfg.get(self._k("window", "title_pattern"),
+                                 "Path of Exile"),
+                    self.cfg.get(self._k("window", "class_pattern")),
                 )
                 if rect is not None:
                     ax, ay = rect.anchor(rel.get("anchor", "top_left"))
@@ -308,14 +343,13 @@ class _OverlayWindow(QWidget):
             except Exception:
                 pass
         return tuple(  # type: ignore[return-value]
-            self.cfg.get("macros.inventory_dump.grid.origin", [1988, 612]))
+            self.cfg.get(self._k("grid", "origin"), [0, 0]))
 
     def _reposition(self) -> None:
         origin = self._current_origin()
-        cell = self.cfg.get("macros.inventory_dump.grid.cell_size", [53, 55])
-        rows = self.cfg.get("macros.inventory_dump.grid.rows", 5)
-        cols = self.cfg.get("macros.inventory_dump.grid.cols", 12)
-        # window covers the whole grid bounding box, centred on each slot.
+        cell = self.cfg.get(self._k("grid", "cell_size"), [53, 55])
+        rows = self.cfg.get(self._k("grid", "rows"), 5)
+        cols = self.cfg.get(self._k("grid", "cols"), 12)
         pad = max(cell) // 2 + 4
         w = cols * cell[0] + pad * 2
         h = rows * cell[1] + pad * 2
@@ -326,19 +360,17 @@ class _OverlayWindow(QWidget):
         self._selected = list(selected)
         self.update()
 
-    def paintEvent(self, _e) -> None:  # noqa: N802 – Qt naming
+    def paintEvent(self, _e) -> None:  # noqa: N802
         origin = getattr(self, "_origin_cache", None) or self._current_origin()
-        cell = self.cfg.get("macros.inventory_dump.grid.cell_size", [53, 55])
+        cell = self.cfg.get(self._k("grid", "cell_size"), [53, 55])
         pad = max(cell) // 2 + 4
-        size = min(cell)  # square highlight
+        size = min(cell)
         p = QPainter(self)
         p.setRenderHint(QPainter.RenderHint.Antialiasing)
         fill = QColor(80, 220, 140, 90)
         border = QColor(80, 220, 140, 220)
-        p.setBrush(fill)
-        p.setPen(border)
+        p.setBrush(fill); p.setPen(border)
         for r, c in self._selected:
-            # local coords = (slot screen coord) - (window top-left)
             lx = origin[0] + c * cell[0] - (origin[0] - pad) - size // 2
             ly = origin[1] + r * cell[1] - (origin[1] - pad) - size // 2
             p.drawRoundedRect(lx, ly, size, size, 4, 4)

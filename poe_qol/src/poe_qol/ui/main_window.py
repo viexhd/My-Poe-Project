@@ -3,6 +3,7 @@
 Tabs:
     * Macros      – global toggle, per-macro on/off + hotkey editor
     * Inventory   – visual 12×5 slot selector + slot profiles + overlay
+    * Map Stash   – visual 12×6 slot selector for the Map stash tab
     * Trade       – regex→trade link generator
 """
 from __future__ import annotations
@@ -36,6 +37,7 @@ class MainWindow(QMainWindow):
 
         tabs.addTab(self._build_macros_tab(), "Macros")
         tabs.addTab(self._build_inventory_tab(), "Inventory")
+        tabs.addTab(self._build_map_stash_tab(), "Map Stash")
         tabs.addTab(TradeWidget(cfg), "Trade")
 
         # Status bar
@@ -96,7 +98,23 @@ class MainWindow(QMainWindow):
 
     # ---- inventory tab ----
     def _build_inventory_tab(self) -> QWidget:
-        return SlotSelector(self.cfg, scheduler=self.scheduler)
+        return SlotSelector(
+            self.cfg,
+            cfg_path="macros.inventory_dump",
+            title="Inventory",
+            macro=self.scheduler.macros.get("inventory_dump"),
+            scheduler=self.scheduler,
+        )
+
+    # ---- map stash tab ----
+    def _build_map_stash_tab(self) -> QWidget:
+        return SlotSelector(
+            self.cfg,
+            cfg_path="macros.map_stash_dump",
+            title="Map Stash",
+            macro=self.scheduler.macros.get("map_stash_dump"),
+            scheduler=self.scheduler,
+        )
 
     # ---- slots ----
     def _on_master(self, s: int) -> None:
