@@ -1,0 +1,7 @@
+# Mapping profile – aggressive flask cadence, inventory dump on.
+macros:
+  life_flask:
+    enabled: true
+    interval_ms: [3800, 4600]
+  inventory_dump:
+    enabled: true

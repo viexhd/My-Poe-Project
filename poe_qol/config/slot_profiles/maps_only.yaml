@@ -1,0 +1,19 @@
+# Example named slot profile.
+# Activate by setting `macros.inventory_dump.active_slot_profile: maps_only`
+# in default.yaml or a profile.
+name: maps_only
+description: "Last column reserved for maps; iterate the first 11."
+# [row, col] pairs, 0-indexed. Rows = 5, Cols = 12 by default.
+slots:
+  - [0,  0]
+  - [0,  1]
+  - [0,  2]
+  - [0,  3]
+  - [1,  0]
+  - [1,  1]
+  - [1,  2]
+  - [1,  3]
+  - [2,  0]
+  - [2,  1]
+  - [2,  2]
+  - [2,  3]

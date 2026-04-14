@@ -1,0 +1,136 @@
+# =====================================================================
+# Default configuration. Profile files under config/profiles/ override
+# any of these keys. Nothing in code should hard-code a value that
+# exists here.
+# =====================================================================
+
+app:
+  profile: mapping           # active profile name (file under profiles/)
+  global_enabled: true       # master on/off switch
+  log_level: INFO
+
+hotkeys:
+  emergency_stop: f12        # hard kill-switch, never disabled
+  toggle_global: pause       # flips app.global_enabled
+  # show/hide main window. Disabled by default because F2 collided
+  # with inventory_dump.hotkeys.right; pick a free combo (e.g.
+  # "ctrl+shift+h") to turn it on once toggle_ui is wired up.
+  toggle_ui:     null
+
+# ---- Input simulation tuning ----
+input:
+  backend: pydirectinput     # pydirectinput | pynput
+  pre_click_settle_ms: 30    # sleep after MouseMove before click
+  click_jitter_px: 1         # random +/- px jitter on MoveTo
+
+# ---- Vision pipeline ----
+vision:
+  capture_backend: mss
+  default_monitor: 1
+  template_dir: assets/templates
+  match_threshold: 0.86
+
+# ---- Macros ----
+# Each macro declares the same top-level keys: enabled, hotkey, config.
+macros:
+
+  life_flask:
+    enabled: true
+    hotkey: "`"              # backtick toggles
+    key: "1"
+    interval_ms: [4000, 5000]   # [min, max] – uniform random
+    tooltip_ms: 1500
+
+  inventory_dump:
+    enabled: true
+    hotkeys:
+      left:  f1
+      right: f2
+    # Origin resolution order (first non-null wins):
+    #   1. anchor_template    – OpenCV template match on screen
+    #   2. origin_relative_to_window – offset from PoE window anchor
+    #   3. grid.origin        – absolute screen coordinates
+    grid:
+      origin: [1988, 612]    # top-left slot centre, screen coords
+      cell_size: [53, 55]    # (w, h) spacing between slots
+      cols: 12
+      rows: 5
+      pattern: serpentine    # serpentine | row_major
+    anchor_template: null    # e.g. "inventory_anchor.png"
+    # Window-relative origin – survives window moves / resolution changes.
+    # `anchor`: top_left | top_right | bottom_left | bottom_right | center
+    # `offset`: [dx, dy] pixels from that anchor to the top-left slot centre.
+    # Leave null to disable this mode.
+    origin_relative_to_window: null
+    # Game window detection (for origin_relative_to_window and overlay).
+    window:
+      title_pattern: "Path of Exile"
+      class_pattern: null
+    modifier: ctrl           # hold this key for the entire sweep
+    click_delay_ms: [30, 80]
+    show_progress: true
+    # Bring PoE to the foreground before the real sweep by clicking
+    # the first selected slot N times with no modifier (set 0 to skip).
+    focus_clicks: 2
+    focus_click_delay_ms: 50
+    # Per-slot filtering. If `selected_slots` is non-empty, ONLY those
+    # slots are clicked. Format: [[row, col], ...]  (0-indexed).
+    # The UI Visual Slot Selector writes into this key.
+    selected_slots: []
+    # Optional named slot profiles, switch by setting `active_slot_profile`.
+    active_slot_profile: null   # e.g. "maps_only"
+    slot_profile_dir: config/slot_profiles
+
+  # ---- Map stash dump ----
+  # Same engine as inventory_dump but a different grid (Map tabs are
+  # 12 cols × 6 rows in PoE) and a different config namespace so the
+  # two share nothing but code.
+  map_stash_dump:
+    enabled: true
+    hotkeys:
+      left:  f3
+      right: f4
+    grid:
+      origin: [800, 200]     # PLACEHOLDER – calibrate from the UI
+      cell_size: [53, 55]    # same cell pitch as inventory by default
+      cols: 12
+      rows: 6
+      pattern: serpentine
+    anchor_template: null
+    origin_relative_to_window: null
+    window:
+      title_pattern: "Path of Exile"
+      class_pattern: null
+    modifier: ctrl
+    click_delay_ms: [30, 80]
+    show_progress: true
+    focus_clicks: 2
+    focus_click_delay_ms: 50
+    selected_slots: []
+    active_slot_profile: null
+    slot_profile_dir: config/slot_profiles_map_stash
+
+  coord_picker:
+    enabled: true
+    hotkeys:
+      capture: ctrl+alt+c
+      show:    ctrl+alt+v
+    save_to: logs/coords.json
+
+# ---- Map-search trade link generator ----
+# Drives the "Map Search" tab. Modifier and preset data live in
+# `mod_map_file` (config/map_mods.yaml, v2 schema).
+trade:
+  league: Mirage
+  status: online               # online | onlineleague | any
+  item_type_id: map_t16        # default dropdown selection (see map_mods.yaml)
+  mod_map_file: config/map_mods.yaml
+  # "post" POSTs to the PoE trade API and uses the canonical hash URL
+  # pathofexile.com/trade expects. "copy" builds a debug ?q= URL that
+  # is useful for inspection but won't render on the site.
+  url_mode: post
+  base_site: https://www.pathofexile.com/trade/search
+  base_api:  https://www.pathofexile.com/api/trade/search
+  # Currently-selected (= excluded) mod ids. Persisted by the UI into
+  # config/user.yaml so your last selection survives a restart.
+  excluded_mods: []
