@@ -3,13 +3,18 @@
 Replaces the old regex-style ``TradeWidget``. Workflow:
 
     1. Pick an Item Type (defaults to Tier 16 Map).
-    2. Toggle mods in the 4 category sections – selected = *excluded*.
-    3. Optionally apply a preset (RF safe, No Reflect, …).
-    4. Click **Open Trade** to POST the query to pathofexile.com and
+    2. Set Rarity / Corrupted / Min # Modifiers filters.
+       Min # Modifiers emits the trade-site "# Modifiers" pseudo
+       (pseudo.pseudo_number_of_affix_mods, e.g. 8 for 8-mod rares).
+    3. Toggle mods in the category sections – selected = *excluded*.
+    4. Optionally save the current selection as a named user preset
+       (right-click a preset button to delete it).
+    5. Click **Open Trade** to POST the query to pathofexile.com and
        open the resulting canonical search URL in the browser.
 
-All mod data (names, stat ids, categories, presets, item types) lives
-in ``config/map_mods.yaml``; nothing is hard-coded here.
+All mod data (names, stat ids, categories, item types) lives in
+``config/map_mods.yaml``; nothing is hard-coded here. User presets
+live in the per-user config, not the shipped YAML.
 """
 from __future__ import annotations
 
@@ -21,9 +26,9 @@ from pathlib import Path
 from PySide6.QtCore import Qt
 from PySide6.QtGui import QGuiApplication
 from PySide6.QtWidgets import (
-    QComboBox, QFrame, QGridLayout, QHBoxLayout, QLabel, QLineEdit,
-    QMessageBox, QPushButton, QScrollArea, QSizePolicy,
-    QVBoxLayout, QWidget,
+    QComboBox, QFrame, QGridLayout, QHBoxLayout, QInputDialog, QLabel,
+    QLineEdit, QMessageBox, QPushButton, QScrollArea, QSizePolicy,
+    QSpinBox, QVBoxLayout, QWidget,
 )
 
 from ..core.config import ConfigStore
@@ -40,6 +45,11 @@ _CFG_LEAGUE = "trade.league"
 _CFG_STATUS = "trade.status"
 _CFG_RARITY = "trade.rarity"
 _CFG_CORRUPTED = "trade.corrupted"
+_CFG_MIN_MODS = "trade.min_modifiers"
+# User-defined presets: list of {"name": str, "excluded": [mod_id, ...]}.
+# Kept separate from dataset.presets so the YAML can stay free of
+# personal bookmarks and upgrades to map_mods.yaml won't clobber them.
+_CFG_USER_PRESETS = "trade.user_presets"
 
 # Dropdowns: label shown to user -> trade-API value (None disables).
 _RARITY_OPTIONS: list[tuple[str, str | None]] = [
@@ -116,10 +126,12 @@ class MapSearchWidget(QWidget):
         top.addWidget(self.status_box, 1)
         root.addLayout(top)
 
-        # ---- filter row: rarity / corrupted ----
-        # (No "# of modifiers" filter: the PoE trade API rejects
-        # `map_filters.map_num_mods` and exposes no pseudo equivalent.
-        # Rare + Corrupted is the closest proxy for 8-mod rares.)
+        # ---- filter row: rarity / corrupted / min # modifiers ----
+        # "# Modifiers" is the trade-site pseudo stat
+        # (pseudo.pseudo_number_of_affix_mods). The trade API rejects
+        # map_filters.map_num_mods, but this pseudo is accepted and is
+        # what pathofexile.com/trade emits when you pick "# Modifiers"
+        # from the stat search. Spin value 0 means "don't emit".
         # Default values are populated in _apply_dataset_defaults() once
         # the dataset has loaded — we need its .defaults block to know
         # what to preselect.
@@ -141,6 +153,17 @@ class MapSearchWidget(QWidget):
             lambda _=0: self._persist_filter(
                 _CFG_CORRUPTED, self.corrupted_box.currentData()))
         filt.addWidget(self.corrupted_box, 1)
+
+        filt.addWidget(QLabel("Min # Mods:"))
+        self.min_mods_spin = QSpinBox()
+        self.min_mods_spin.setRange(0, 8)          # 0 = off
+        self.min_mods_spin.setSpecialValueText("Off")
+        self.min_mods_spin.setToolTip(
+            "Minimum explicit affix count (trade pseudo '# Modifiers'). "
+            "Use 8 for 8-mod corrupted rares; 0 disables the filter.")
+        self.min_mods_spin.valueChanged.connect(
+            lambda v: self._persist_filter(_CFG_MIN_MODS, int(v)))
+        filt.addWidget(self.min_mods_spin)
         root.addLayout(filt)
 
         # ---- search bar ----
@@ -270,8 +293,15 @@ class MapSearchWidget(QWidget):
         self.scroll_layout.addStretch(1)
 
     def _populate_presets(self) -> None:
+        """Render user-defined preset buttons + Save/Delete controls.
+
+        We no longer ship default presets — users build their own
+        named exclusion sets via *Save Preset*. Any `dataset.presets`
+        entries (for back-compat with YAMLs that still have them) are
+        rendered as read-only buttons after the user ones.
+        """
         assert self.dataset is not None
-        # Clear existing preset buttons.
+        # Clear existing preset widgets.
         while self.preset_row.count():
             item = self.preset_row.takeAt(0)
             w = item.widget()
@@ -279,14 +309,95 @@ class MapSearchWidget(QWidget):
                 w.deleteLater()
 
         self.preset_row.addWidget(QLabel("Presets:"))
+
+        # User-defined presets (stored in cfg).
+        for idx, p in enumerate(self._user_presets()):
+            name = str(p.get("name") or "unnamed")
+            excluded = list(p.get("excluded") or [])
+            b = QPushButton(name)
+            b.setToolTip(
+                f"Apply user preset '{name}' ({len(excluded)} mod(s)). "
+                "Right-click to delete.")
+            b.clicked.connect(
+                lambda _=False, ex=excluded: self._apply_excluded_ids(ex))
+            b.setContextMenuPolicy(Qt.ContextMenuPolicy.CustomContextMenu)
+            b.customContextMenuRequested.connect(
+                lambda _pos, i=idx: self._delete_user_preset(i))
+            self.preset_row.addWidget(b)
+
+        # Any legacy YAML presets — still honoured if present.
         for p in self.dataset.presets:
             b = QPushButton(p.name)
             if p.description:
-                b.setToolTip(p.description)
+                b.setToolTip(p.description + " (from map_mods.yaml)")
             b.clicked.connect(lambda _checked=False, pid=p.id:
                               self._apply_preset(pid))
             self.preset_row.addWidget(b)
+
+        # Save-current-selection button.
+        save = QPushButton("Save Preset…")
+        save.setToolTip(
+            "Save the current exclusion set as a named preset (stored "
+            "in your user config).")
+        save.clicked.connect(self._save_user_preset)
+        self.preset_row.addWidget(save)
         self.preset_row.addStretch(1)
+
+    # ---- user presets ----
+    def _user_presets(self) -> list[dict]:
+        raw = self.cfg.get(_CFG_USER_PRESETS) or []
+        if not isinstance(raw, list):
+            return []
+        return [p for p in raw if isinstance(p, dict)]
+
+    def _save_user_preset(self) -> None:
+        ids = self._selected_ids()
+        if not ids:
+            QMessageBox.information(
+                self, "Save Preset",
+                "Select at least one mod to exclude before saving.")
+            return
+        name, ok = QInputDialog.getText(
+            self, "Save Preset", "Preset name:")
+        name = (name or "").strip()
+        if not ok or not name:
+            return
+        presets = self._user_presets()
+        # Overwrite any preset with the same name so users can iterate.
+        presets = [p for p in presets if p.get("name") != name]
+        presets.append({"name": name, "excluded": list(ids)})
+        self.cfg.set(_CFG_USER_PRESETS, presets)
+        try:
+            self.cfg.save_user_overrides([_CFG_USER_PRESETS])
+        except Exception:
+            log.exception("failed to persist user preset")
+        self._populate_presets()
+
+    def _delete_user_preset(self, idx: int) -> None:
+        presets = self._user_presets()
+        if not (0 <= idx < len(presets)):
+            return
+        name = presets[idx].get("name", "?")
+        if QMessageBox.question(
+                self, "Delete Preset",
+                f"Delete preset '{name}'?") != QMessageBox.StandardButton.Yes:
+            return
+        del presets[idx]
+        self.cfg.set(_CFG_USER_PRESETS, presets)
+        try:
+            self.cfg.save_user_overrides([_CFG_USER_PRESETS])
+        except Exception:
+            log.exception("failed to persist user preset deletion")
+        self._populate_presets()
+
+    def _apply_excluded_ids(self, ids: list[str]) -> None:
+        wanted = set(ids)
+        for mid, btn in self._buttons.items():
+            btn.blockSignals(True)
+            btn.setChecked(mid in wanted)
+            btn.blockSignals(False)
+        self._update_preview()
+        self._persist_selection()
 
     # -----------------------------------------------------------------
     # Event handlers
@@ -392,7 +503,8 @@ class MapSearchWidget(QWidget):
         try:
             self.cfg.save_user_overrides(
                 [_CFG_EXCLUDED, _CFG_ITEM_TYPE, _CFG_LEAGUE, _CFG_STATUS,
-                 _CFG_RARITY, _CFG_CORRUPTED])
+                 _CFG_RARITY, _CFG_CORRUPTED, _CFG_MIN_MODS,
+                 _CFG_USER_PRESETS])
         except Exception:
             log.exception("failed to persist trade prefs")
 
@@ -420,6 +532,15 @@ class MapSearchWidget(QWidget):
         self.corrupted_box.setCurrentIndex(idx if idx >= 0 else 0)
         self.corrupted_box.blockSignals(False)
 
+        min_mods = self.cfg.get(_CFG_MIN_MODS, d.min_modifiers)
+        try:
+            mm_val = int(min_mods) if min_mods is not None else 0
+        except (TypeError, ValueError):
+            mm_val = 0
+        self.min_mods_spin.blockSignals(True)
+        self.min_mods_spin.setValue(max(0, min(8, mm_val)))
+        self.min_mods_spin.blockSignals(False)
+
     # -----------------------------------------------------------------
     # Actions
     # -----------------------------------------------------------------
@@ -435,6 +556,7 @@ class MapSearchWidget(QWidget):
             status=self.cfg.get(_CFG_STATUS, "online"),
             rarity=self.rarity_box.currentData(),
             corrupted=self.corrupted_box.currentData(),
+            min_modifiers=self.min_mods_spin.value(),
         )
 
     def _build_url(self, mode: str) -> str | None:

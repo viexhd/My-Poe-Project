@@ -79,29 +79,39 @@ class Preset:
 
 @dataclass
 class SearchDefaults:
-    """Default trade-site filters (rarity / corrupted).
+    """Default trade-site filters (rarity / corrupted / min_modifiers).
 
     Each field is either a plain value or ``None`` to mean "don't add
     the filter at all". Stored verbatim and applied by
     :func:`build_map_query`; individual calls may override.
 
-    Note: PoE's trade API has no public filter for "# of modifiers on
-    a map" — neither ``map_filters.map_num_mods`` (rejected as
-    ``Invalid filter``) nor any documented pseudo stat. Callers that
-    want "8+ mod rares" should pick Rare + Corrupted and eyeball the
-    results.
+    ``min_modifiers`` is emitted as the ``pseudo.pseudo_number_of_affix_mods``
+    pseudo stat (the trade-site "# Modifiers" pseudo). ``map_filters.
+    map_num_mods`` is rejected as ``Invalid filter`` by the trade API, so
+    the pseudo is the supported path. Set to 0 or None to turn it off.
     """
     rarity: str | None = None            # "rare" / "nonunique" / ...
     corrupted: str | None = None         # "true" / "false" / None
+    min_modifiers: int | None = None     # 0..8, default 8 for rare maps
 
     @classmethod
     def from_yaml(cls, raw: dict | None) -> "SearchDefaults":
         raw = raw or {}
+        mm = raw.get("min_modifiers")
         return cls(
             rarity=raw.get("rarity"),
             corrupted=(str(raw["corrupted"]).lower()
                        if raw.get("corrupted") is not None else None),
+            min_modifiers=(int(mm) if mm is not None else None),
         )
+
+
+# PoE trade pseudo stat for "# Modifiers" (explicit affix count). This
+# is what pathofexile.com/trade emits when you type "# Modifiers" into
+# the stat search — NOT ``map_filters.map_num_mods`` (rejected with
+# "Invalid filter"). Confirmed via Awakened PoE Trade's stats.ndjson
+# (`pseudo.pseudo_number_of_affix_mods`).
+PSEUDO_NUMBER_OF_AFFIX_MODS = "pseudo.pseudo_number_of_affix_mods"
 
 
 @dataclass
@@ -193,7 +203,8 @@ def build_map_query(dataset: MapDataset, *,
                     league: str = "Standard",
                     status: str = "online",
                     rarity: Any = _UNSET,
-                    corrupted: Any = _UNSET) -> dict[str, Any]:
+                    corrupted: Any = _UNSET,
+                    min_modifiers: Any = _UNSET) -> dict[str, Any]:
     """Assemble a trade POST payload.
 
     Layout matches what pathofexile.com/trade emits for
@@ -216,6 +227,8 @@ def build_map_query(dataset: MapDataset, *,
         rarity = dataset.defaults.rarity
     if corrupted is _UNSET:
         corrupted = dataset.defaults.corrupted
+    if min_modifiers is _UNSET:
+        min_modifiers = dataset.defaults.min_modifiers
 
     item = dataset.item_type(item_type_id)
     filters: dict[str, Any] = {}
@@ -250,6 +263,25 @@ def build_map_query(dataset: MapDataset, *,
     grp = _exclusion_group(excl_mods)
     if grp:
         stats.append(grp)
+
+    # "# Modifiers" pseudo (e.g. min=8 for 8-mod rares). Emitted as a
+    # type:"and" stat group with a single pseudo filter — matches what
+    # pathofexile.com/trade emits when you pick the pseudo from the
+    # stat search dropdown. Skipped when min_modifiers is None or 0.
+    try:
+        mm = int(min_modifiers) if min_modifiers is not None else 0
+    except (TypeError, ValueError):
+        mm = 0
+    if mm > 0:
+        stats.append({
+            "type": "and",
+            "filters": [{
+                "id": PSEUDO_NUMBER_OF_AFFIX_MODS,
+                "value": {"min": mm},
+                "disabled": False,
+            }],
+            "disabled": False,
+        })
 
     q: dict[str, Any] = {
         "query": {
