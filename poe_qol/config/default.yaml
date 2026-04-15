@@ -107,3 +107,25 @@ trade:
   # Currently-selected (= excluded) mod ids. Persisted by the UI into
   # config/user.yaml so your last selection survives a restart.
   excluded_mods: []
+
+# ---- Currency flipper (poe.ninja-backed) ----
+# Ranks currencies by composite flip-attractiveness (volume × spread ×
+# stability × confidence × liquidity). See economy/flipper.py for the
+# scoring math and src/poe_qol/ui/flipper_widget.py for the UI.
+flipper:
+  # League defaults to trade.league if unset; the UI lets you override
+  # so you can watch a different league without touching the trade tab.
+  league: null
+  # Drop currencies with fewer than this many daily round-trip-able
+  # trades (min of pay/receive counts). 10 is enough signal to matter
+  # without flooding the table with fringe items.
+  min_volume: 10
+  # poe.ninja flags thin-data entries as low-confidence; skipping them
+  # removes most noise. Flip on to see speculative opportunities.
+  include_low_confidence: false
+  # Minutes between automatic refreshes. 0 = manual only.
+  auto_refresh_minutes: 0
+  # Disk cache freshness for poe.ninja responses (seconds). 600 is
+  # short enough to stay useful for bulk-flipping sessions while being
+  # polite to poe.ninja's free endpoint.
+  cache_sec: 600

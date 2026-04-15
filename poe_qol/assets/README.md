@@ -1,8 +1,31 @@
 # assets
 
-Drop the app icon here as `app_icon.png` (or `app_icon.ico`). It is
-picked up automatically at startup by `ui/branding.py` and applied to
-both `QApplication.setWindowIcon` and the main window.
+`ui/branding.py` picks up `app_icon.png` (or `app_icon.ico`) from this
+folder automatically at startup and applies it to both
+`QApplication.setWindowIcon` and the main window.
+
+## Quick path (recommended) — scripted build from a raw PNG
+
+1. Save the mascot PNG (transparent background, ≥1024px) as
+   `poe_qol/assets/piplup_source.png`.
+2. Install the optional build dep once:
+   ```
+   pip install -e .[tools]       # or: pip install Pillow
+   ```
+3. Run the builder:
+   ```
+   python -m poe_qol.tools.build_icon
+   ```
+
+You get three files next to the source:
+
+    app_icon_1024.png   # master, for store listings / README banners
+    app_icon.png        # 512×512, loaded by the runtime UI
+    app_icon.ico        # multi-res (16/24/32/48/64/128/256) for Windows
+
+The script applies the "Option A" treatment from the design review:
+10% internal padding, rounded square (18% corner radius), dark vertical
+gradient, thin `#E8B057` gold ring, baked-in soft shadow.
 
 ## Recommended export for the Piplup mascot
 

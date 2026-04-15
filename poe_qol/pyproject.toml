@@ -32,5 +32,10 @@ vision = [
 [project.scripts]
 twice-corrupted = "poe_qol.app:run"
 
+[project.optional-dependencies]
+# Scripts under poe_qol.tools (e.g. build_icon) only — not pulled in
+# by the runtime app.
+tools = ["Pillow>=10.0"]
+
 [tool.setuptools.packages.find]
 where = ["src"]

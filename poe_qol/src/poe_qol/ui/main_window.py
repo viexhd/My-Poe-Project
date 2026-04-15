@@ -5,6 +5,7 @@ Tabs:
     * Inventory   – 12×5 slot highlighter + slot profiles + overlay
     * Map Stash   – 12×6 slot highlighter for the Map stash tab
     * Map Search  – visual map mod exclusion → pathofexile.com/trade link
+    * Flipper     – poe.ninja-backed bulk currency flip ranking
 
 Help → About shows GGG's required third-party disclaimer.
 """
@@ -24,6 +25,7 @@ from ..core.state import AppState
 from ..engine.scheduler import Scheduler
 from .map_search_widget import MapSearchWidget
 from .slot_selector import SlotSelector
+from .flipper_widget import FlipperWidget
 
 
 class MainWindow(QMainWindow):
@@ -47,6 +49,12 @@ class MainWindow(QMainWindow):
         tabs.addTab(self._build_inventory_tab(), "Inventory")
         tabs.addTab(self._build_map_stash_tab(), "Map Stash")
         tabs.addTab(MapSearchWidget(cfg), "Map Search")
+        # Flipper needs repo root to locate its disk cache. Resolve
+        # the same way app.py does — two parents up from this file's
+        # package, then two more to reach the repo.
+        from pathlib import Path as _Path
+        repo_root = _Path(__file__).resolve().parents[3]
+        tabs.addTab(FlipperWidget(cfg, repo_root), "Flipper")
 
         help_menu = self.menuBar().addMenu("&Help")
         about = QAction(f"About {APP_NAME}", self)
