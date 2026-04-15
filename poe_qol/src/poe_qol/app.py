@@ -13,7 +13,9 @@ from .core.state import AppState
 from .engine.scheduler import Scheduler
 from .input.hotkeys import HotkeyRouter
 from .input.sender import InputSender
+from .ui.branding import load_app_icon
 from .ui.main_window import MainWindow
+from .ui.styles import apply_theme
 
 
 def run() -> int:
@@ -38,7 +40,13 @@ def run() -> int:
     qapp.setApplicationName(APP_ID)
     qapp.setApplicationDisplayName(APP_NAME)
     qapp.setApplicationVersion(__version__)
+    apply_theme(qapp)
+    icon = load_app_icon(root)
+    if not icon.isNull():
+        qapp.setWindowIcon(icon)
     win = MainWindow(cfg, state, scheduler)
+    if not icon.isNull():
+        win.setWindowIcon(icon)
     win.show()
     try:
         return qapp.exec()

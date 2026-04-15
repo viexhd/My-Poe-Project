@@ -66,8 +66,9 @@ class SlotSelector(QWidget):
         rows = self.cfg.get(self._k("grid", "rows"), 5)
         cols = self.cfg.get(self._k("grid", "cols"), 12)
 
-        header = QLabel(f"{self.title} slots ({rows} × {cols})")
+        header = QLabel(f"{self.title} slots  ·  {rows} × {cols}")
         header.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        header.setProperty("role", "section")
         v.addWidget(header)
 
         grid_w = QWidget()
@@ -133,6 +134,7 @@ class SlotSelector(QWidget):
             "Highlight only: turn on the overlay, then Ctrl-click the "
             "highlighted slots yourself. Nothing is clicked for you.")
         hint.setWordWrap(True)
+        hint.setProperty("role", "caption")
         v.addWidget(hint)
 
         self._summary = QLabel()
@@ -140,11 +142,10 @@ class SlotSelector(QWidget):
         self._refresh_summary()
 
     def _style_button(self, b: QToolButton) -> None:
-        b.setStyleSheet("""
-            QToolButton            { background:#333; border:1px solid #555; }
-            QToolButton:checked    { background:#4a8; border:1px solid #7db; }
-            QToolButton:hover      { border:1px solid #aaa; }
-        """)
+        # Styling lives in ui/styles.py (QToolButton rules). Kept as a
+        # hook so individual cells can opt into variants later without
+        # touching callers.
+        pass
 
     # ---- selection ----
     def _current_selected(self) -> list[tuple[int, int]]:

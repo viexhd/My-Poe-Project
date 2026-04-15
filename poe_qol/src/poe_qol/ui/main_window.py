@@ -84,9 +84,11 @@ class MainWindow(QMainWindow):
         self.master.stateChanged.connect(self._on_master)
         v.addWidget(self.master)
 
-        self.estop = QPushButton("EMERGENCY STOP (F12)")
-        self.estop.setStyleSheet(
-            "background:#c00;color:white;font-weight:bold;padding:8px")
+        self.estop = QPushButton("Emergency stop (F12)")
+        # Themed via ui/styles.py: ghost-red by default, fills solid red
+        # when armed (`armed` property flipped on by _refresh_status).
+        self.estop.setProperty("role", "danger")
+        self.estop.setProperty("armed", False)
         self.estop.clicked.connect(self.scheduler.emergency_stop)
         v.addWidget(self.estop)
 
@@ -115,7 +117,8 @@ class MainWindow(QMainWindow):
         # bind-time so the user sees it instead of only learning
         # about it via the logs.
         self.conflict_label = QLabel("")
-        self.conflict_label.setStyleSheet("color:#e80;font-weight:bold;")
+        self.conflict_label.setStyleSheet(
+            "color:#E0A24A; font-weight:600;")
         self.conflict_label.setWordWrap(True)
         v.addWidget(self.conflict_label)
 
@@ -186,7 +189,12 @@ class MainWindow(QMainWindow):
         elif not conflict and self.conflict_label.text():
             self.conflict_label.setText("")
 
-        if self.state.stop_event.is_set():
+        tripped = self.state.stop_event.is_set()
+        if self.estop.property("armed") != tripped:
+            from .styles import repolish
+            self.estop.setProperty("armed", tripped)
+            repolish(self.estop)
+        if tripped:
             self.status.setText(
                 "EMERGENCY STOP — re-check 'Global enabled' to resume")
             return

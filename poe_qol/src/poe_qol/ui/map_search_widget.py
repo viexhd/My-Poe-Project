@@ -67,6 +67,23 @@ _CORRUPTED_OPTIONS: list[tuple[str, str | None]] = [
 ]
 
 
+def _tint_rgba(hex_color: str, alpha: float) -> str:
+    """``#RRGGBB`` + alpha (0..1) → ``rgba(r,g,b,a)`` for QSS.
+
+    Used so category colors from ``map_mods.yaml`` can be rendered as
+    soft translucent fills in dark mode without precomputing variants.
+    """
+    h = hex_color.lstrip("#")
+    if len(h) != 6:
+        return hex_color
+    try:
+        r, g, b = int(h[0:2], 16), int(h[2:4], 16), int(h[4:6], 16)
+    except ValueError:
+        return hex_color
+    a = max(0.0, min(1.0, alpha))
+    return f"rgba({r},{g},{b},{a:.3f})"
+
+
 class _ModButton(QPushButton):
     """Checkable button wired to a single mod id. Stays visually
     distinct in checked state via styleSheet (Qt default is subtle)."""
@@ -78,13 +95,18 @@ class _ModButton(QPushButton):
         self.setCursor(Qt.CursorShape.PointingHandCursor)
         self.setSizePolicy(QSizePolicy.Policy.Expanding,
                            QSizePolicy.Policy.Fixed)
-        # Background = category color when selected, neutral when not.
+        # Checked uses a translucent fill with a solid category-colored
+        # border so neighboring chips don't visually clash on dark bg.
+        # `_tint_rgba` keeps alpha independent of the source hex.
+        tint = _tint_rgba(color, 0.28)
         self.setStyleSheet(
-            "QPushButton { padding: 6px 10px; border: 1px solid #555;"
-            " border-radius: 4px; background:#2b2b2b; color:#ddd; }"
-            f"QPushButton:checked {{ background: {color}; color:white;"
-            f" border: 1px solid {color}; font-weight: bold; }}"
-            "QPushButton:hover { border: 1px solid #aaa; }"
+            "QPushButton { padding: 6px 10px; border: 1px solid #2A3240;"
+            " border-radius: 4px; background:#1C222C; color:#E6EAF2;"
+            " text-align:left; }"
+            f"QPushButton:checked {{ background: {tint};"
+            f" border: 1px solid {color}; color:#FFFFFF;"
+            " font-weight: 600; }}"
+            "QPushButton:hover { border: 1px solid #3A4454; }"
         )
 
 
@@ -198,15 +220,14 @@ class MapSearchWidget(QWidget):
         self.preview = QLabel("No mods excluded.")
         self.preview.setWordWrap(True)
         self.preview.setStyleSheet(
-            "color:#bbb; padding:6px; background:#202020;"
-            " border:1px solid #333; border-radius:4px;")
+            "color:#A9B2C3; padding:8px 10px; background:#151A22;"
+            " border:1px solid #2A3240; border-radius:6px;")
         root.addWidget(self.preview)
 
         # ---- action row ----
         actions = QHBoxLayout()
         self.open_btn = QPushButton("Open Trade")
-        self.open_btn.setStyleSheet(
-            "background:#27ae60;color:white;font-weight:bold;padding:8px;")
+        self.open_btn.setProperty("role", "primary")
         self.open_btn.clicked.connect(self._open_trade)
         actions.addWidget(self.open_btn)
 
@@ -267,10 +288,15 @@ class MapSearchWidget(QWidget):
             sec_v = QVBoxLayout(section)
             sec_v.setContentsMargins(0, 0, 0, 0)
 
+            # Left-edge color bar instead of a full-width banner — keeps
+            # the category tint visible at a glance without screaming
+            # over every mod chip inside the section.
             header = QLabel(cat.name)
             header.setStyleSheet(
-                f"color:white; background:{cat.color}; padding:4px 8px;"
-                " font-weight:bold; border-radius:3px;")
+                f"color:#E6EAF2; padding:6px 10px; font-weight:600;"
+                f" font-size:14px;"
+                f" border-left: 3px solid {cat.color};"
+                f" background: rgba(255,255,255,0.02);")
             sec_v.addWidget(header)
 
             grid_host = QWidget()
