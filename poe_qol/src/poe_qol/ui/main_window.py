@@ -6,6 +6,7 @@ Tabs:
     * Map Stash   – 12×6 slot highlighter for the Map stash tab
     * Map Search  – visual map mod exclusion → pathofexile.com/trade link
     * Flipper     – poe.ninja-backed bulk currency flip ranking
+    * Pricer      – clipboard-driven trade-site price lookup
 
 Help → About shows GGG's required third-party disclaimer.
 """
@@ -26,6 +27,7 @@ from ..engine.scheduler import Scheduler
 from .map_search_widget import MapSearchWidget
 from .slot_selector import SlotSelector
 from .flipper_widget import FlipperWidget
+from .pricer_widget import PricerWidget
 
 
 class MainWindow(QMainWindow):
@@ -55,6 +57,7 @@ class MainWindow(QMainWindow):
         from pathlib import Path as _Path
         repo_root = _Path(__file__).resolve().parents[3]
         tabs.addTab(FlipperWidget(cfg, repo_root), "Flipper")
+        tabs.addTab(PricerWidget(cfg), "Pricer")
 
         help_menu = self.menuBar().addMenu("&Help")
         about = QAction(f"About {APP_NAME}", self)

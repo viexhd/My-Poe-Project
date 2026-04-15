@@ -129,3 +129,17 @@ flipper:
   # short enough to stay useful for bulk-flipping sessions while being
   # polite to poe.ninja's free endpoint.
   cache_sec: 600
+
+# ---- Clipboard pricer ----
+# Listens on QClipboard and queries pathofexile.com/api/trade for
+# comparable listings whenever the user Ctrl+Cs an item in PoE.
+# Surfaces a "stale floor" insight that the site itself doesn't.
+pricer:
+  # Defaults to trade.league if null, same convention as flipper.
+  league: null
+  # Trade slug for the currency prices should be denominated in.
+  # "chaos" covers 95% of use-cases; switch to "divine" late-league.
+  have_currency: chaos
+  # When true, every Ctrl+C fires a trade-API lookup automatically.
+  # Turn off if you prefer to browse items without spamming requests.
+  auto_price_on_copy: true
