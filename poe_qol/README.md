@@ -1,127 +1,76 @@
-# poe_qol
+# poe_qol: developer notes
 
-Modular quality-of-life automation for Path of Exile. A refactor of
-four legacy scripts (`Life Flask.ahk`, `inventory.ahk`,
-`getcoords.ahk`, `poe mini project/autoclicker.cpp`) into a single
-cohesive Python application.
+This is the developer guide. For the user guide, install steps and the compliance notice, see the [root README](../README.md).
 
-Only simulates user input (no memory access / injection) — same
-posture as AutoHotkey.
+> This product isn't affiliated with or endorsed by Grinding Gear Games in any way.
 
-## Why Python
+## Stack
 
-* **PySide6** for the UI — cross-platform, mature, trivially packaged.
-* **pydirectinput** for input — uses `SendInput` with scancodes, works
-  with DirectInput games like PoE.
-* **keyboard** for global hotkey hooks — low-latency WH_KEYBOARD_LL.
-* **OpenCV + mss** for image recognition — ~200 FPS ROI capture,
-  template matching in a few ms.
-
-See `default.yaml` for the single source of truth for every timing,
-coordinate, and hotkey. No magic numbers live in code.
-
-## Install / run
-
-```bash
-python -m pip install -r requirements.txt
-python -m poe_qol
-```
+* **PySide6** for the UI.
+* **pydirectinput-rgx** for input: `SendInput` with scancodes, which PoE accepts.
+* **keyboard** for global hotkeys (a `WH_KEYBOARD_LL` hook).
+* Optional **OpenCV + mss + numpy** (`pip install -e .[vision]`) for the template-match anchor. These are imported lazily, so the app runs without them.
 
 ## Layout
 
 ```
-config/                 YAML config (default + profiles)
-assets/templates/       PNGs for template matching
-logs/                   Log files + captured coords
+config/                 YAML config: default + profiles + slot profiles + map_mods
+logs/                   log file + captured coords (runtime, git-ignored)
 src/poe_qol/
-    core/               config, state bus, logger
-    input/              hotkey router, input sender
-    vision/             mss capture, opencv detectors
-    engine/             Macro ABC, registry, scheduler
-    macros/             one file per feature (plugin-style)
-    ui/                 Qt main window
+    app.py              composition root: config → state → input → engine → UI
+    core/               ConfigStore (layered YAML), AppState (pub-sub + kill switch), logger
+    input/              HotkeyRouter, InputSender
+    vision/             mss capture, OpenCV detectors, Win32 window lookup
+    engine/             Macro ABC, @register registry, Scheduler
+    macros/             one file per macro (plugin-style, auto-discovered)
+    trade/              map_query (MapDataset, build_map_query), builder (build_url)
+    ui/                 MainWindow, SlotSelector + overlay, CalibrateDialog, MapSearchWidget
+tests/                  unittest suite
 ```
 
-## Adding a new macro
+## Config layering
 
-1. Drop a new file under `src/poe_qol/macros/`.
-2. Subclass `Macro`, set `NAME`, decorate with `@register`.
-3. Add a `macros.<name>` section in `default.yaml`.
+`default.yaml`, then `profiles/<app.profile>.yaml`, then `user.yaml`, deep-merged in that order. All code reads config through `ConfigStore.get("dot.path")`. The UI persists selected keys with `ConfigStore.save_user_overrides([...])`.
 
-That's it — `Scheduler.load()` discovers it on next launch.
+## Adding a macro
 
-## Features converted
+1. Add a file under `src/poe_qol/macros/`.
+2. Subclass `Macro`, set `NAME` and `HOTKEYS`, and decorate the class with `@register`.
+3. Add a `macros.<name>` section in `config/default.yaml`.
 
-| Legacy script | Replaced by |
-|---|---|
-| `Life Flask.ahk` | `macros/life_flask.py` |
-| `inventory.ahk` + `autoclicker.cpp` | `macros/inventory_dump.py` |
-| `getcoords.ahk` | `macros/coord_picker.py` |
+`Scheduler.load()` discovers it on the next launch.
+
+**Compliance rule for new macros:** one manual key press may produce **at most one** action that interacts with the game, and nothing may be triggered by a timer, file change or screen read. See [`docs/COMPLIANCE_REVIEW.md`](../docs/COMPLIANCE_REVIEW.md).
 
 ## Safety
 
-* `F12` emergency stop is always bound and cannot be rebound to nothing.
+* `F12` emergency stop is always bound, with a Qt in-window fallback for when the global hook is blocked by UIPI.
 * `Pause` toggles the master switch.
-* Every macro checks `AppState.stop_event` every iteration — no loop
-  can run away for more than one click / keystroke.
-* Re-entry is guarded at the `Macro` base class, so hammering F1 never
-  starts two inventory sweeps.
+* Sweeps use interruptible waits (`Event.wait`), so F12 aborts mid-delay. Modifiers are released in `finally`.
+* Re-entry is guarded in the `Macro` base class.
 
----
+## Map Search
 
-## Trade-link generator
+`config/map_mods.yaml` (schema **version 2**) defines:
 
-A tiny poe.re-style parser turns regex-ish map mod queries into a PoE
-trade POST payload / URL.
+* `item_types`: dropdown entries, mapping to `type_filters.category` and `map_filters.map_tier`
+* `categories`: section order and colour
+* `mods`: `id`, `name`, `category`, trade `stat_id`, search `tags`
+* `presets`: named sets of excluded mod ids
+* `defaults`: rarity and corrupted filters
 
-Syntax:
+`build_map_query` emits a single `count` stat group with `value.max = 0` (*none of these mods*), the same shape the trade site produces. `build_url(mode="post")` POSTs to the trade search API and returns the hash URL. `mode="copy"` builds an offline `?q=` URL for inspection.
 
-    ,  newline    – AND (all groups must match)
-    |             – OR within a group
-    !             – negate an atom
-    "…"           – quote a multi-word mod (optional; spaces are OK
-                    unquoted as long as no `,` / `|` appears inside)
+When GGG changes a stat id between leagues, edit `map_mods.yaml`. No Python changes are needed. The POST path also strips any stat id the API reports as unknown and retries.
 
-Examples:
+## Visual slot selector
 
-| Input | Meaning | Trade stat group |
-|---|---|---|
-| `!reflect` | reject reflect maps | `{type: not, filters: [reflect]}` |
-| `!reflect, !no regen` | reject both | two `not` groups (AND) |
-| `!reflect\|!no regen` | reject only maps with *both* | `{type: count, max: 1}` |
-| `reflect\|vuln` | accept if at least one matches | `{type: count, min: 1}` |
+The **Inventory** and **Map Stash** tabs render a config-driven grid of toggle buttons. Selection is written to `macros.<name>.selected_slots`. They provide:
 
-Mod name → stat id mapping lives entirely in `config/map_mods.yaml`.
-Aliases (e.g. `no regen` → `no regeneration`) and substring matching
-make the input forgiving. Unknown mods log a warning and are dropped.
-
-URL generation is config-driven:
-
-    trade.url_mode: copy   # URL-encodes JSON into ?q= (copy/paste)
-    trade.url_mode: post   # POSTs to api/trade/search, returns real URL
-
-## Visual inventory slot selector
-
-The **Inventory** tab renders a live 12×5 (config-driven) grid of
-toggle buttons. Selection writes back to
-`macros.inventory_dump.selected_slots` in config. When
-`selected_slots` is non-empty, the inventory-dump sweep only visits
-those slots.
-
-Features:
 * **All / None / Invert** bulk actions.
-* **Save / Delete** named profiles under `config/slot_profiles/*.yaml`.
-  The profile dropdown loads them on the fly, and you can set
-  `macros.inventory_dump.active_slot_profile` in a top-level profile
-  (mapping / bossing) to auto-select one.
-* **Show overlay** — a frameless, always-on-top, click-through window
-  that highlights the selected slots at the *real* inventory
-  coordinates (origin + cell size from config). Drag the PoE window
-  or tweak origin and the overlay moves with it.
-
-The sweep still uses the existing vision anchor when
-`anchor_template` is set, so the selector speaks in (row, col) and
-the origin can be resolved from a template match at runtime.
+* Named profiles under `slot_profile_dir`, applied with `active_slot_profile`.
+* **Show overlay**: a frameless, always-on-top, click-through window highlighting the selected slots at their real screen coordinates.
+* **Calibrate…**: hover the top-left, top-right and bottom-left slots and press F8 at each. The app computes origin and cell size across the full grid and can store a window-relative offset.
 
 ## Tests
 
@@ -129,6 +78,5 @@ the origin can be resolved from a template match at runtime.
 python -m unittest discover -s poe_qol/tests -v
 ```
 
-Covers parser edge cases, trade-query builder (AND/OR/NOT/count),
-mod-map aliasing + substring lookup, and grid generation + selection
-filtering.
+* `test_map_query.py`: `MapDataset` loading of the shipped catalogue, `build_map_query` payload shape, `build_url` copy mode, stale-stat stripping.
+* `test_inventory_grid.py`: serpentine and row-major grid generation, slot filtering.
