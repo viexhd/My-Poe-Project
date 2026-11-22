@@ -5,9 +5,31 @@ build-backend = "setuptools.build_meta"
 [project]
 name = "poe_qol"
 version = "0.1.0"
-description = "Modular quality-of-life automation for Path of Exile"
+description = "Quality-of-life companion app for Path of Exile"
 requires-python = ">=3.11"
 readme = "README.md"
+# Runtime dependencies. Ranges are bounded to the major versions this
+# project has been tested with; requirements-lock.txt pins the exact
+# versions of a known-good environment.
+dependencies = [
+    "PySide6>=6.6,<7",
+    "PyYAML>=6.0,<7",
+    "keyboard>=0.13.5,<0.14",
+    "pydirectinput-rgx>=2.1,<3",
+]
+
+[project.optional-dependencies]
+# Only needed for `anchor_template` (OpenCV template matching), which is
+# off by default. The modules are imported lazily, so the app runs
+# without them.
+vision = [
+    "numpy>=1.26,<3",
+    "opencv-python>=4.9,<5",
+    "mss>=9.0,<11",
+]
+
+[project.scripts]
+poe-qol = "poe_qol.app:run"
 
 [tool.setuptools.packages.find]
 where = ["src"]

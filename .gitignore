@@ -1,0 +1,53 @@
+# ---- Python ----
+__pycache__/
+*.py[cod]
+*.egg-info/
+.eggs/
+build/
+dist/
+*.spec.bak
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.coverage
+htmlcov/
+
+# ---- Virtual environments ----
+.venv/
+venv/
+env/
+
+# ---- Runtime data written by the app (never commit) ----
+# Logs, captured coordinates, poe.ninja cache, etc.
+poe_qol/logs/
+logs/
+# Per-user overrides written by the UI (calibration, selections, league).
+poe_qol/config/user.yaml
+# Local databases / exports (economy features, Wealthy Exile CSVs).
+*.sqlite
+*.sqlite3
+*.db
+exports/
+
+# ---- Secrets / credentials ----
+.env
+.env.*
+*.pem
+*.key
+credentials*.json
+*POESESSID*
+
+# ---- IDE / OS / tooling ----
+.vscode/
+.idea/
+*.swp
+.DS_Store
+Thumbs.db
+desktop.ini
+.claude/settings.local.json
+
+# ---- Build artefacts of the archived C++ tool ----
+*.exe
+*.obj
+*.pdb
+*.ilk
