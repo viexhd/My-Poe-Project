@@ -89,6 +89,19 @@ class RenderTests(unittest.TestCase):
         self.assertEqual({p.name for p in files} >= set(expect) | {"app_icon.ico"},
                          True)
 
+    def test_bundled_banner_fonts(self) -> None:
+        from poe_qol.tools import build_brand as bb
+        fonts = ROOT / "assets" / "brand" / "fonts"
+        for f in ("SixCaps.ttf", "SixCaps-OFL.txt",
+                  "Almendra-Regular.ttf", "Almendra-OFL.txt"):
+            self.assertTrue((fonts / f).exists(), f)   # OFL: licence ships too
+        families = bb.load_brand_fonts()
+        self.assertIn("Six Caps", families)
+        self.assertIn("Almendra", families)
+        self.assertEqual(bb.TITLE_FAMILY, "Six Caps")
+        self.assertEqual(bb.SUBTITLE_FAMILY, "Almendra")
+        self.assertFalse(hasattr(bb, "TAGLINE"))       # tagline removed
+
     def test_runtime_icon_is_found(self) -> None:
         from poe_qol.ui.branding import resolve_icon_path
         p = resolve_icon_path(ROOT)

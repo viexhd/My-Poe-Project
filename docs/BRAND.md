@@ -46,15 +46,18 @@ Accessibility is checked in `tests/test_brand.py`:
 
 | Role | Font |
 |---|---|
-| Display (banner title) | **Cinzel** if it's installed, otherwise Constantia, then Georgia. Rendered into the PNG, so readers don't need the font. |
+| Display (banner title) | **Six Caps** (Vernon Adams, SIL OFL 1.1): tall, condensed capitals in gilt with light tracking |
+| Banner subtitle | **Almendra** (Ana Sanfelippo, SIL OFL 1.1): a calligraphic, old-world text face in bone colour |
 | UI | Segoe UI Variable / Segoe UI (bundled with Windows) |
-| Taglines | Segoe UI semibold, letter-spaced caps, ash colour |
+
+Both banner fonts are bundled, unmodified, with their licences in `poe_qol/assets/brand/fonts/` (from [google/fonts](https://github.com/google/fonts)). That means the banner renders identically on any machine, and the PNGs don't need the fonts installed to be viewed. The OFL allows redistributing the font files as long as their `OFL.txt` licences go with them.
 
 ## Assets
 
 | File | Size | Notes |
 |---|---|---|
 | `poe_qol/assets/brand/icon.svg` | vector | **Source of truth.** Groups `tile` and `bloom` can be rendered separately. |
+| `poe_qol/assets/brand/fonts/` | — | Six Caps and Almendra TTFs plus their OFL licences |
 | `poe_qol/assets/app_icon.png` | 512² | Runtime window and taskbar icon |
 | `poe_qol/assets/app_icon.ico` | 16–256 | Windows multi-size icon |
 | `poe_qol/assets/app_icon_1024.png` | 1024² | Master |

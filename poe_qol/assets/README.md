@@ -5,6 +5,7 @@ Brand assets for **Twice Corrupted**. See [`docs/BRAND.md`](../../docs/BRAND.md)
 | File | What | Used by |
 |---|---|---|
 | `brand/icon.svg` | **Source** artwork for the app icon (vector, self-contained) | `tools/build_brand.py` |
+| `brand/fonts/` | Six Caps and Almendra (`.ttf` + `OFL.txt`) | Banner and social preview text |
 | `app_icon.png` | 512×512 render | Loaded at runtime by `ui/branding.py` (window and taskbar icon) |
 | `app_icon.ico` | 16–256 px multi-size icon | Windows shortcuts and a future installer |
 | `app_icon_1024.png` | 1024×1024 master render | Store and installer artwork |
@@ -20,4 +21,4 @@ cd poe_qol
 .venv\Scripts\python -m poe_qol.tools.build_brand
 ```
 
-Only Qt is needed: QtSvg ships with PySide6, so there's no Pillow. Banner text uses Cinzel if it's installed, otherwise Constantia or Georgia. Commit the regenerated files together with the source change.
+Only Qt is needed: QtSvg ships with PySide6, so there's no Pillow. The banner and social preview use the bundled fonts in `brand/fonts/`: **Six Caps** for the title and **Almendra** for the subtitle, both under SIL OFL 1.1 with their licences alongside. Commit the regenerated files together with the source change.

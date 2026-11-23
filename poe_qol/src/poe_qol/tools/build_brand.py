@@ -37,6 +37,9 @@ from PySide6.QtSvg import QSvgRenderer
 
 ASSETS = Path(__file__).resolve().parents[3] / "assets"
 ICON_SVG = ASSETS / "brand" / "icon.svg"
+FONTS_DIR = ASSETS / "brand" / "fonts"   # bundled OFL fonts (+ licences)
+TITLE_FAMILY = "Six Caps"       # SixCaps.ttf, Vernon Adams, SIL OFL 1.1
+SUBTITLE_FAMILY = "Almendra"    # Almendra-Regular.ttf, Ana Sanfelippo, SIL OFL 1.1
 ICO_SIZES = (16, 24, 32, 48, 64, 128, 256)
 
 # Palette (kept in sync with ui/styles.py)
@@ -52,7 +55,24 @@ ASH = "#A8968A"
 
 TITLE = "TWICE CORRUPTED"
 SUBTITLE = "A quality-of-life companion for Path of Exile"
-TAGLINE = "NO MEMORY READS  ·  NO TIMERS  ·  ONE ACTION PER KEY PRESS"
+
+_loaded_families: set[str] | None = None
+
+
+def load_brand_fonts() -> set[str]:
+    """Register the bundled banner fonts with Qt (needs a QGuiApplication).
+    Returns the font families now available from FONTS_DIR."""
+    global _loaded_families
+    if _loaded_families is None:
+        from PySide6.QtGui import QFontDatabase
+        fams: set[str] = set()
+        for ttf in sorted(FONTS_DIR.glob("*.ttf")):
+            fid = QFontDatabase.addApplicationFont(str(ttf))
+            if fid < 0:
+                raise OSError(f"Qt could not load font {ttf.name}")
+            fams.update(QFontDatabase.applicationFontFamilies(fid))
+        _loaded_families = fams
+    return set(_loaded_families)
 
 
 def _blank(w: int, h: int) -> QImage:
@@ -177,21 +197,20 @@ def _gilt_text(p: QPainter, text: str, font: QFont, x: float, baseline: float,
 
 
 def _title_font(px: int) -> QFont:
+    load_brand_fonts()
     f = QFont()
-    f.setFamilies(["Cinzel", "Trajan Pro", "Constantia", "Georgia", "serif"])
+    f.setFamilies([TITLE_FAMILY])
     f.setPixelSize(px)
-    f.setWeight(QFont.Weight.DemiBold)
-    f.setLetterSpacing(QFont.SpacingType.AbsoluteSpacing, px * 0.12)
+    # Six Caps is very condensed; a little tracking keeps it legible.
+    f.setLetterSpacing(QFont.SpacingType.AbsoluteSpacing, px * 0.05)
     return f
 
 
-def _ui_font(px: int, spacing: float = 0, weight=QFont.Weight.Normal) -> QFont:
+def _subtitle_font(px: int) -> QFont:
+    load_brand_fonts()
     f = QFont()
-    f.setFamilies(["Segoe UI Variable Text", "Segoe UI", "Arial"])
+    f.setFamilies([SUBTITLE_FAMILY])
     f.setPixelSize(px)
-    f.setWeight(weight)
-    if spacing:
-        f.setLetterSpacing(QFont.SpacingType.AbsoluteSpacing, spacing)
     return f
 
 
@@ -221,7 +240,7 @@ def render_banner(width: int = 1600, height: int = 400) -> QImage:
     icon = height * 0.62
     ix, iy = height * 0.19, (height - icon) / 2
     tx = ix + icon + 54
-    text_block = QRectF(tx, height * 0.22, width * 0.72 - tx, height * 0.64)
+    text_block = QRectF(tx, height * 0.18, width * 0.70 - tx, height * 0.70)
 
     # Large faded bloom bleeding off the right edge, clear of the title.
     p.setOpacity(0.32)
@@ -231,14 +250,11 @@ def render_banner(width: int = 1600, height: int = 400) -> QImage:
                      keep_clear=text_block, x_from=0.3)
     renderer.render(p, QRectF(ix, iy, icon, icon))
 
-    _gilt_text(p, TITLE, _title_font(int(height * 0.175)), tx, height * 0.46)
-    _rule(p, tx + 4, width * 0.74, height * 0.57)
+    _gilt_text(p, TITLE, _title_font(int(height * 0.36)), tx, height * 0.56)
+    _rule(p, tx + 4, width * 0.74, height * 0.64)
     p.setPen(QColor(BONE))
-    p.setFont(_ui_font(int(height * 0.075)))
-    p.drawText(QPointF(tx + 2, height * 0.70), SUBTITLE)
-    p.setPen(QColor(ASH))
-    p.setFont(_ui_font(int(height * 0.042), spacing=2.4, weight=QFont.Weight.DemiBold))
-    p.drawText(QPointF(tx + 3, height * 0.81), TAGLINE)
+    p.setFont(_subtitle_font(int(height * 0.088)))
+    p.drawText(QPointF(tx + 2, height * 0.80), SUBTITLE)
     p.end()
     return img
 
@@ -274,20 +290,15 @@ def render_social_preview(width: int = 1280, height: int = 640) -> QImage:
     renderer = QSvgRenderer(str(ICON_SVG))
     renderer.render(p, QRectF((width - icon) / 2, height * 0.08, icon, icon))
 
-    font = _title_font(int(height * 0.115))
+    font = _title_font(int(height * 0.24))
     path = QPainterPath()
     path.addText(QPointF(0, 0), font, TITLE)
     tw = path.boundingRect().width()
-    _gilt_text(p, TITLE, font, (width - tw) / 2, height * 0.72)
+    _gilt_text(p, TITLE, font, (width - tw) / 2, height * 0.80)
     p.setPen(QColor(BONE))
-    f = _ui_font(int(height * 0.045))
-    p.setFont(f)
-    rect = QRectF(0, height * 0.76, width, height * 0.08)
+    p.setFont(_subtitle_font(int(height * 0.055)))
+    rect = QRectF(0, height * 0.83, width, height * 0.10)
     p.drawText(rect, Qt.AlignmentFlag.AlignCenter, SUBTITLE)
-    p.setPen(QColor(ASH))
-    p.setFont(_ui_font(int(height * 0.026), spacing=2.0, weight=QFont.Weight.DemiBold))
-    p.drawText(QRectF(0, height * 0.85, width, height * 0.06),
-               Qt.AlignmentFlag.AlignCenter, TAGLINE)
     p.end()
     return img
 
