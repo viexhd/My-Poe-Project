@@ -170,9 +170,3 @@ poe_qol/
     requirements*.txt     runtime install / exact lock
     run.bat, run-admin.bat
 ```
-
-## Design
-
-The visual identity, **"scarlet rot & gilt"**, uses warm obsidian surfaces, bone-white text, gilt-gold actions and crimson highlights. It centres on an original two-layer bloom of blade-curved petals inside a cracked gold ring: *twice corrupted*. Its mood is inspired by Malenia from *Elden Ring*. It is fan inspiration only, and no FromSoftware or Grinding Gear Games artwork, logos or likenesses are used. Details and rebuild steps are in [`docs/BRAND.md`](docs/BRAND.md).
-
-<p align="center"><img src="poe_qol/assets/app_icon.png" alt="Twice Corrupted icon" width="128"></p>
