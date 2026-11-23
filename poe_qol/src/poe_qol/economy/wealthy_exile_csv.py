@@ -5,10 +5,15 @@ The user exports the file themselves on wealthyexile.com
 local file: no Wealthy Exile login, cookie or private endpoint is used.
 See docs/WEALTHY_EXILE_INTEGRATION.md.
 
-Wealthy Exile does not document the CSV layout, so headers are matched
-loosely. Its on-site stash table shows Name, Tab, Quantity, Price and
-Total; any header with a quantity column plus a price or total column
-works. One file = one snapshot taken at the file's modified time.
+Real export layout (confirmed 2026-11-23): quoted, comma-separated
+``"Name","Tab","Quantity","Price","Total"``; prices are in chaos; Total is
+more precise than Quantity x Price (Price is rounded). Headers are still
+matched loosely in case Wealthy Exile renames a column.
+
+One file = one snapshot. Its time comes from the export file name
+(``Wealthy-Exile-export-MM_DD_YYYY H_MM.csv``), falling back to the
+file's modified time. The "Divine Orb" row gives the chaos-per-divine
+rate at export time.
 """
 from __future__ import annotations
 
@@ -34,6 +39,7 @@ class Snapshot:
     unit: str             # "chaos" | "divine" | "unknown"
     rows: int             # rows that contributed to `total`
     skipped: int          # rows that could not be parsed
+    divine_price: float | None = None   # chaos per divine, from the export
 
 
 _SPACES = re.compile(r"[\s   ]+")
@@ -91,6 +97,28 @@ def _find_columns(header: list[str]) -> dict[str, int]:
     return cols
 
 
+_EXPORT_TIME = re.compile(r"(\d{1,2})_(\d{1,2})_(\d{4})[ _](\d{1,2})_(\d{2})")
+
+
+def _time_from_name(path: Path) -> datetime | None:
+    """Export time from ``...MM_DD_YYYY H_MM...``. The hour may be 12-hour
+    without AM/PM, so pick the reading closest to the file's mtime."""
+    m = _EXPORT_TIME.search(path.stem)
+    if not m:
+        return None
+    month, day, year, hour, minute = (int(g) for g in m.groups())
+    hours = [hour] + ([hour + 12] if hour < 12 else [])
+    try:
+        cands = [datetime(year, month, day, h, minute) for h in hours]
+    except ValueError:
+        return None
+    try:
+        mtime = datetime.fromtimestamp(path.stat().st_mtime)
+    except OSError:
+        return cands[0]
+    return min(cands, key=lambda c: abs((c - mtime).total_seconds()))
+
+
 def _read_text(path: Path) -> str:
     raw = path.read_bytes()
     try:
@@ -124,22 +152,29 @@ def parse_snapshot(path: str | Path, taken_at: datetime | None = None) -> Snapsh
 
     total = 0.0
     rows = skipped = 0
+    divine_price: float | None = None
     for row in reader:
         if not any(cell.strip() for cell in row):
             continue
         try:
-            value = None
             if "total" in cols and cols["total"] < len(row) and row[cols["total"]].strip():
                 value = parse_number(row[cols["total"]])
             else:
-                qty = parse_number(row[cols["quantity"]])
-                price = parse_number(row[cols["price"]])
-                value = qty * price
+                value = parse_number(row[cols["quantity"]]) * parse_number(row[cols["price"]])
             total += value
             rows += 1
         except (ValueError, IndexError, KeyError):
             skipped += 1
+            continue
+        if (divine_price is None and "name" in cols and cols["name"] < len(row)
+                and row[cols["name"]].strip().lower() == "divine orb"):
+            try:
+                qty = parse_number(row[cols["quantity"]])
+                divine_price = value / qty if qty > 0 else None
+            except (ValueError, IndexError):
+                pass
 
-    when = taken_at or datetime.fromtimestamp(path.stat().st_mtime)
+    when = (taken_at or _time_from_name(path)
+            or datetime.fromtimestamp(path.stat().st_mtime))
     return Snapshot(path=path, taken_at=when, total=total, unit=unit,
-                    rows=rows, skipped=skipped)
+                    rows=rows, skipped=skipped, divine_price=divine_price)

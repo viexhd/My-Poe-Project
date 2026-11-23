@@ -1,6 +1,13 @@
 # Wealthy Exile Integration: Research and Proposal
 
-**Status (2026-11-23): Option B is partly built.** The **Wealth** tab and overlay compute divine-per-hour from the two newest CSV exports in a user-chosen folder (`economy/wealthy_exile_csv.py`, `economy/wealth_rate.py`). There is no SQLite history yet, and the dashboard, stash and history pages are still to come. **The real CSV layout is still unconfirmed.** Headers are matched loosely (a quantity column plus a price or total column), so please send a real export to lock it down. A live, logged-in feed is **not** built; it needs Wealthy Exile's permission.
+**Status (2026-11-23): Option B is partly built.** The **Wealth** tab and overlay compute divine-per-hour from the two newest CSV exports in a user-chosen folder (`economy/wealthy_exile_csv.py`, `economy/wealth_rate.py`). There is no SQLite history yet, and the dashboard, stash and history pages are still to come. **CSV layout confirmed from a real export (2026-11-23):**
+- quoted, comma-separated `"Name","Tab","Quantity","Price","Total"`
+- prices are in chaos, and `Total` is more precise than `Quantity × Price`
+- names can contain commas, and tab names can be numbers
+- the file name carries the export time (`Wealthy-Exile-export-MM_DD_YYYY H_MM.csv`)
+- the `Divine Orb` row gives the chaos-per-divine rate, used automatically
+
+A 346-row real export parsed with 0 rows skipped. A synthetic excerpt is in `tests/fixtures/wealthy_exile_sample.csv`; the real file is not committed. A live, logged-in feed is **not** built; it needs Wealthy Exile's permission.
 
 Tags: **[V]** verified (source and date), **[R]** recommendation, **[A]** assumption.
 

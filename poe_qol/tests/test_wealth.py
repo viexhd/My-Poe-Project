@@ -106,6 +106,47 @@ class ParseSnapshotTests(unittest.TestCase):
         self.assertIn("quantity", str(ctx.exception).lower())
 
 
+FIXTURE = ROOT / "tests" / "fixtures" / "wealthy_exile_sample.csv"
+
+
+class RealExportFormatTests(unittest.TestCase):
+    """Layout confirmed from a real Wealthy Exile export (2026-11-23):
+    quoted "Name","Tab","Quantity","Price","Total", prices in chaos,
+    Total more precise than Quantity x Price, names may contain commas,
+    tab names may be numbers. Fixture values are synthetic."""
+
+    def test_fixture_parses_completely(self) -> None:
+        snap = parse_snapshot(FIXTURE)
+        self.assertEqual((snap.rows, snap.skipped), (6, 0))
+        self.assertAlmostEqual(snap.total, 2004 + 500 + 700 + 9 + 34 + 0.02)
+
+    def test_divine_price_comes_from_divine_orb_row(self) -> None:
+        # Total / Quantity (2004 / 10) beats the rounded Price column (200).
+        self.assertAlmostEqual(parse_snapshot(FIXTURE).divine_price, 200.4)
+
+    def test_no_divine_row_means_no_divine_price(self) -> None:
+        tmp = Path(tempfile.mkdtemp(prefix="tc_nd_"))
+        p = _write(tmp, "x.csv", '"Name","Tab","Quantity","Price","Total"\n'
+                                 '"Chaos Orb","Currency","5","1","5"\n')
+        self.assertIsNone(parse_snapshot(p).divine_price)
+
+    def test_taken_at_from_export_filename(self) -> None:
+        tmp = Path(tempfile.mkdtemp(prefix="tc_fn_"))
+        name = "Wealthy-Exile-export-11_23_2026 9_38.csv"
+        morning = datetime(2026, 11, 23, 9, 38, 5).timestamp()
+        p = _write(tmp, name, FIXTURE.read_text(encoding="utf-8"), morning)
+        self.assertEqual(parse_snapshot(p).taken_at, datetime(2026, 11, 23, 9, 38))
+        # Same name, file written in the evening: 9_38 is read as 21:38.
+        evening = datetime(2026, 11, 23, 21, 38, 20).timestamp()
+        os.utime(p, (evening, evening))
+        self.assertEqual(parse_snapshot(p).taken_at, datetime(2026, 11, 23, 21, 38))
+        # A copied file (fresh mtime days later) keeps the export time.
+        later = datetime(2026, 11, 26, 9, 0).timestamp()
+        os.utime(p, (later, later))
+        self.assertEqual(parse_snapshot(p).taken_at.date(),
+                         datetime(2026, 11, 23).date())
+
+
 class ComputeRateTests(unittest.TestCase):
     def _snap(self, total: float, minutes: float, unit: str = "chaos"):
         from poe_qol.economy.wealthy_exile_csv import Snapshot
@@ -131,6 +172,16 @@ class ComputeRateTests(unittest.TestCase):
         r = compute_rate(self._snap(1, 30), self._snap(5, 30), chaos_per_divine=180)
         self.assertIsNone(r.divine_per_hour)
         self.assertTrue(r.message)
+
+    def test_divine_rate_auto_from_export(self) -> None:
+        from dataclasses import replace
+        later = replace(self._snap(1360, 60), divine_price=180.0)
+        r = compute_rate(self._snap(1000, 0), later, chaos_per_divine=None)
+        self.assertAlmostEqual(r.divine_per_hour, 2.0)
+        self.assertIn("auto", r.message.lower())
+        # An explicit rate wins over the export's.
+        r = compute_rate(self._snap(1000, 0), later, chaos_per_divine=360)
+        self.assertAlmostEqual(r.divine_per_hour, 1.0)
 
     def test_mixed_units_rejected(self) -> None:
         r = compute_rate(self._snap(1, 0, "divine"), self._snap(500, 60, "chaos"),

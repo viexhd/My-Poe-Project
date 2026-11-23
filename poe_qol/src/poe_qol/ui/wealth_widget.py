@@ -56,7 +56,8 @@ class WealthWidget(QWidget):
             "Shows your divine-per-hour from Wealthy Exile CSV exports. On "
             "wealthyexile.com press <b>Sync stash</b>, then <b>⋯ → Export "
             "CSV</b>, and save the file into the folder below. Each new "
-            "export is compared with the previous one.")
+            "export is compared with the previous one; the divine rate is "
+            "taken from the export's Divine Orb price unless you set one.")
         intro.setWordWrap(True)
         v.addWidget(intro)
 
@@ -82,7 +83,10 @@ class WealthWidget(QWidget):
         self.rate_spin = QDoubleSpinBox()
         self.rate_spin.setRange(0, 100000)
         self.rate_spin.setDecimals(1)
-        self.rate_spin.setSpecialValueText("unknown")
+        self.rate_spin.setSpecialValueText("auto (from export)")
+        self.rate_spin.setToolTip(
+            "Leave at 0 to use the Divine Orb price in your newest export. "
+            "Set a number to override it.")
         self.rate_spin.setValue(float(self.cfg.get(_K_RATE, 0) or 0))
         self.rate_spin.valueChanged.connect(self._on_settings_changed)
         form.addRow("Chaos per divine:", self.rate_spin)
@@ -144,6 +148,8 @@ class WealthWidget(QWidget):
         for s in src.snapshots():
             unit = s.unit if s.unit != "unknown" else self.unit_box.currentData()
             extra = f", {s.skipped} rows skipped" if s.skipped else ""
+            if s.divine_price:
+                extra += f", 1 div = {s.divine_price:,.0f}c"
             self.snap_list.addItem(
                 f"{s.taken_at:%Y-%m-%d %H:%M}  ·  {s.total:,.1f} {unit}  ·  "
                 f"{s.rows} rows{extra}  ·  {s.path.name}")

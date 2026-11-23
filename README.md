@@ -47,7 +47,7 @@ A desktop quality-of-life companion for **Path of Exile**, built with Python and
 2. Open **⋯ → Export CSV** and save the file into your exports folder.
 3. Repeat later.
 
-The overlay shows the change between your last two exports, converted with your chaos-per-divine rate. It needs PoE in windowed or windowed-fullscreen mode. A live Wealthy Exile feed isn't built: Wealthy Exile has no public API, so that would need their permission (see [`docs/WEALTHY_EXILE_INTEGRATION.md`](docs/WEALTHY_EXILE_INTEGRATION.md)).
+The overlay shows the change between your last two exports. Each export's Divine Orb row supplies the chaos-per-divine rate automatically, or you can set your own. The export time comes from the file name Wealthy Exile gives it (`Wealthy-Exile-export-MM_DD_YYYY H_MM.csv`). It needs PoE in windowed or windowed-fullscreen mode. A live Wealthy Exile feed isn't built: Wealthy Exile has no public API, so that would need their permission (see [`docs/WEALTHY_EXILE_INTEGRATION.md`](docs/WEALTHY_EXILE_INTEGRATION.md)).
 
 **Under the hood**
 

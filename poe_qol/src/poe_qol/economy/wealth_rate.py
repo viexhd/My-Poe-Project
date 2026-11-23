@@ -65,14 +65,24 @@ def compute_rate(earlier: Snapshot, later: Snapshot, *,
                            snapshots_used=2, latest_at=later.taken_at)
     per_hour = (later.total - earlier.total) * 60.0 / minutes
 
+    # An explicit rate wins; otherwise use the newest export's Divine Orb
+    # price (chaos per divine at the time of that export).
     rate = chaos_per_divine if chaos_per_divine and chaos_per_divine > 0 else None
+    auto = False
+    if rate is None and later.divine_price and later.divine_price > 0:
+        rate, auto = later.divine_price, True
     if u1 == "divine":
         div = per_hour
         chaos = per_hour * rate if rate else None
     else:
         chaos = per_hour
         div = per_hour / rate if rate else None
-    msg = "" if div is not None else "Set chaos per divine to see div/h."
+    if div is None:
+        msg = "Set chaos per divine to see div/h."
+    elif auto:
+        msg = f"rate {rate:,.0f}c (auto from export)"
+    else:
+        msg = ""
     return RateReading(divine_per_hour=div, chaos_per_hour=chaos,
                        span_minutes=minutes, snapshots_used=2,
                        latest_at=later.taken_at, message=msg)
