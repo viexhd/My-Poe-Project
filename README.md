@@ -2,6 +2,8 @@
 
 A desktop quality-of-life companion for **Path of Exile**, built with Python and PySide6. It brings map-search trade links, inventory and map-stash slot highlighting, calibration and overlays together in one window, and is being developed into a fuller companion app. The roadmap is in [`docs/`](docs/).
 
+**Repository:** <https://github.com/viexhd/Twice-Corrupted> (formerly `My-Poe-Project`; old links redirect).
+
 > **This product isn't affiliated with or endorsed by Grinding Gear Games in any way.**
 
 **Compliance first.** Twice Corrupted follows GGG's published rules for third-party tools (<https://www.pathofexile.com/developer/docs>). It never reads or changes game memory or game files. Nothing sends game input on a timer, and no key press performs more than one game action. The earlier life-flask timer and bulk Ctrl-click "dump" macros were retired for breaking those rules. See [`docs/COMPLIANCE_REVIEW.md`](docs/COMPLIANCE_REVIEW.md). GGG doesn't certify any third-party tool, so use any tool at your own discretion.
@@ -30,6 +32,19 @@ A desktop quality-of-life companion for **Path of Exile**, built with Python and
 - PoE in **windowed** or **windowed fullscreen** mode, for the overlay
 
 ## Install and run
+
+### Get the code
+
+```powershell
+git clone https://github.com/viexhd/Twice-Corrupted.git
+cd Twice-Corrupted
+```
+
+If you cloned the repo under its old name, point the existing clone at the new URL:
+
+```powershell
+git remote set-url origin https://github.com/viexhd/Twice-Corrupted.git
+```
 
 ### Quick start
 
@@ -97,6 +112,7 @@ poe_qol\.venv\Scripts\python -m unittest discover -s poe_qol/tests -v
 ## Repository layout
 
 ```
+Twice-Corrupted/
 docs/                     research, audit, roadmap and design documents
 legacy/                   archived scripts and retired macros (reference only, not used)
 poe_qol/
