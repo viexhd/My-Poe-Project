@@ -1,7 +1,6 @@
-# Mapping profile – aggressive flask cadence, inventory dump on.
-macros:
-  life_flask:
-    enabled: true
-    interval_ms: [3800, 4600]
-  inventory_dump:
-    enabled: true
+# Mapping profile. Partial overrides of config/default.yaml.
+# (It used to tune the retired life-flask timer and inventory dump.)
+# Example:
+#   trade:
+#     item_type_id: map_t16
+{}

@@ -16,4 +16,14 @@ These are the original scripts that `poe_qol` replaced. They are kept for refere
 | `autoclicker.cpp` | Win32 GUI version of the inventory clicker | `macros/inventory_dump.py` | ❌ |
 | `getcoords.ahk` | Ctrl+Alt+C / Ctrl+Alt+V cursor-coordinate capture | `macros/coord_picker.py` | ✅ (no game input) |
 
+## `poe_qol_macros/`: retired Python macros
+
+These are the Python ports of the scripts above. They were retired from the app on 2026-11-23 for the same compliance reasons, with the owner's approval. They are copies of the last working versions, kept for reference. They are **not** on the import path and won't run as-is.
+
+| File | What it did | Replaced by |
+|---|---|---|
+| `life_flask.py` | Backtick toggles pressing the flask key every 4–5 s | Nothing (no compliant equivalent sends input) |
+| `inventory_dump.py` | F1/F2: focus clicks, then Ctrl+click up to 60 inventory slots. Also held `GridDumpMacro` and the grid helpers. | Inventory tab slot **highlighter** (overlay only; you click) |
+| `map_stash_dump.py` | F3/F4: the same sweep over a 12×6 map stash tab | Map Stash tab slot **highlighter** |
+
 `autoclicker.cpp` used to live in `poe mini project/` at the repo root. Nothing in the build or the app references any of these files. They can be deleted once you no longer need them, and git history keeps them either way.

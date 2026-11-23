@@ -2,18 +2,22 @@
 
 Tabs:
     * Macros      – global toggle, per-macro on/off + hotkey editor
-    * Inventory   – visual 12×5 slot selector + slot profiles + overlay
-    * Map Stash   – visual 12×6 slot selector for the Map stash tab
+    * Inventory   – 12×5 slot highlighter + slot profiles + overlay
+    * Map Stash   – 12×6 slot highlighter for the Map stash tab
     * Map Search  – visual map mod exclusion → pathofexile.com/trade link
+
+Help → About shows GGG's required third-party disclaimer.
 """
 from __future__ import annotations
 
 from PySide6.QtCore import Qt, QTimer
-from PySide6.QtGui import QKeySequence, QShortcut
+from PySide6.QtGui import QAction, QKeySequence, QShortcut
 from PySide6.QtWidgets import (
-    QCheckBox, QHBoxLayout, QLabel, QLineEdit, QMainWindow, QPushButton,
-    QSpinBox, QTabWidget, QVBoxLayout, QWidget,
+    QCheckBox, QHBoxLayout, QLabel, QLineEdit, QMainWindow, QMessageBox,
+    QPushButton, QTabWidget, QVBoxLayout, QWidget,
 )
+
+from .. import APP_NAME, DISCLAIMER, __version__
 
 from ..core.config import ConfigStore
 from ..core.state import AppState
@@ -30,7 +34,7 @@ class MainWindow(QMainWindow):
         self.state = state
         self.scheduler = scheduler
 
-        self.setWindowTitle("PoE QoL")
+        self.setWindowTitle(APP_NAME)
         # Larger default so the Map Search tab's category grid fits
         # without scrolling. The Macros / slot-selector tabs are happy
         # with less space but benefit from the extra width too.
@@ -43,6 +47,11 @@ class MainWindow(QMainWindow):
         tabs.addTab(self._build_inventory_tab(), "Inventory")
         tabs.addTab(self._build_map_stash_tab(), "Map Stash")
         tabs.addTab(MapSearchWidget(cfg), "Map Search")
+
+        help_menu = self.menuBar().addMenu("&Help")
+        about = QAction(f"About {APP_NAME}", self)
+        about.triggered.connect(self._show_about)
+        help_menu.addAction(about)
 
         # Qt-level fallback shortcut for emergency stop. The primary
         # path is the global `keyboard` hook (input/hotkeys.py), but
@@ -90,9 +99,8 @@ class MainWindow(QMainWindow):
                 self.cfg.set(f"macros.{n}.enabled", bool(s)))
             row.addWidget(cb)
 
-            # One line-edit per action in HOTKEYS so macros with both
-            # `left` and `right` bindings (inventory_dump,
-            # map_stash_dump) are fully editable from the UI.
+            # One line-edit per action in HOTKEYS so macros with
+            # several bindings are fully editable from the UI.
             for action, path in macro.HOTKEYS.items():
                 row.addWidget(QLabel(action))
                 le = QLineEdit(self.cfg.get(path, "") or "")
@@ -111,16 +119,6 @@ class MainWindow(QMainWindow):
         self.conflict_label.setWordWrap(True)
         v.addWidget(self.conflict_label)
 
-        v.addWidget(QLabel("Life flask interval (ms)"))
-        lo, hi = self.cfg.get("macros.life_flask.interval_ms", [4000, 5000])
-        row = QHBoxLayout()
-        self.lo_spin = QSpinBox(); self.lo_spin.setRange(500, 30000); self.lo_spin.setValue(lo)
-        self.hi_spin = QSpinBox(); self.hi_spin.setRange(500, 30000); self.hi_spin.setValue(hi)
-        self.lo_spin.valueChanged.connect(self._on_interval)
-        self.hi_spin.valueChanged.connect(self._on_interval)
-        row.addWidget(self.lo_spin); row.addWidget(self.hi_spin)
-        v.addLayout(row)
-
         v.addStretch(1)
         return w
 
@@ -130,7 +128,6 @@ class MainWindow(QMainWindow):
             self.cfg,
             cfg_path="macros.inventory_dump",
             title="Inventory",
-            macro=self.scheduler.macros.get("inventory_dump"),
             scheduler=self.scheduler,
         )
 
@@ -140,7 +137,6 @@ class MainWindow(QMainWindow):
             self.cfg,
             cfg_path="macros.map_stash_dump",
             title="Map Stash",
-            macro=self.scheduler.macros.get("map_stash_dump"),
             scheduler=self.scheduler,
         )
 
@@ -155,9 +151,19 @@ class MainWindow(QMainWindow):
         if on:
             self.state.clear_emergency()
 
-    def _on_interval(self) -> None:
-        self.cfg.set("macros.life_flask.interval_ms",
-                     [self.lo_spin.value(), self.hi_spin.value()])
+    def about_text(self) -> str:
+        return "\n".join([
+            f"{APP_NAME} {__version__}",
+            "",
+            "A quality-of-life companion for Path of Exile.",
+            "It never reads or changes game memory or game files, and "
+            "never runs game input on a timer.",
+            "",
+            DISCLAIMER,
+        ])
+
+    def _show_about(self) -> None:
+        QMessageBox.about(self, f"About {APP_NAME}", self.about_text())
 
     def _rebind(self, cfg_path: str, combo: str) -> None:
         self.cfg.set(cfg_path, combo)
@@ -186,8 +192,8 @@ class MainWindow(QMainWindow):
             return
 
         # Progress-aware active list. Macros expose `progress` as
-        # (current, total) during a sweep so we can render
-        # "inventory_dump 5/60" instead of just the name.
+        # (current, total) while working so we can render
+        # "name 5/60" instead of just the name.
         parts: list[str] = []
         for n, m in self.scheduler.macros.items():
             if not m.running:
