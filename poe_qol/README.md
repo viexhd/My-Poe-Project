@@ -24,7 +24,10 @@ src/poe_qol/
     engine/             Macro ABC, @register registry, Scheduler
     macros/             one file per macro (plugin-style, auto-discovered): coord_picker
     trade/              map_query (MapDataset, build_map_query), builder (build_url)
-    ui/                 MainWindow (+ Help/About), SlotSelector + overlay, CalibrateDialog, MapSearchWidget
+    ui/                 MainWindow (+ Help/About), SlotSelector + overlay, CalibrateDialog, MapSearchWidget,
+                        AreaSelectWidget + AreaSelectOverlay
+    area_select/        Alt+drag selection: grid mapping, gesture gate, occupancy, transfer, controller
+    experimental/       opt-in, NOT GGG-compliant features (bulk Ctrl-click transfer)
 tests/                  unittest suite
 ```
 

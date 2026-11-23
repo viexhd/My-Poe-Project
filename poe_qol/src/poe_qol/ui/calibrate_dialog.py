@@ -314,9 +314,12 @@ class CalibrateDialog(QDialog):
                     ax, ay = rect.anchor(anchor)
                     dx = c["tl"][0] - ax
                     dy = c["tl"][1] - ay
+                    # window_size lets the overlay / area select scale
+                    # the grid when the game resolution changes.
                     self.cfg.set(
                         self._k("origin_relative_to_window"),
-                        {"anchor": anchor, "offset": [dx, dy]})
+                        {"anchor": anchor, "offset": [dx, dy],
+                         "window_size": [rect.width, rect.height]})
             except Exception:
                 pass
         else:

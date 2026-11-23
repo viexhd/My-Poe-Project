@@ -7,7 +7,10 @@ tests pin the decisions recorded in docs/COMPLIANCE_REVIEW.md §2.1:
 * no timer / bulk-click macros are registered,
 * the Inventory / Map Stash tabs only highlight slots (no Dump action),
 * shipped config carries no hotkeys for the retired macros,
-* the product is called "Twice Corrupted" and shows GGG's disclaimer.
+* the product is called "Twice Corrupted" and shows GGG's disclaimer,
+* the Alt+drag area selection ships in manual (highlight-only) mode;
+  its experimental bulk Ctrl-click transfer, which is NOT compliant,
+  is off and unacknowledged by default and lives in its own package.
 """
 from __future__ import annotations
 
@@ -64,6 +67,46 @@ class DefaultConfigTests(unittest.TestCase):
             data = yaml.safe_load(p.read_text(encoding="utf-8")) or {}
             macros = (data.get("macros") or {})
             self.assertFalse(set(macros) & RETIRED, p.name)
+
+
+class AreaSelectDefaultsTests(unittest.TestCase):
+    def setUp(self) -> None:
+        import yaml
+        self.data = yaml.safe_load(
+            (ROOT / "config" / "default.yaml").read_text(encoding="utf-8"))
+
+    def test_ships_in_manual_mode(self) -> None:
+        sec = self.data["area_select"]
+        self.assertEqual(sec["transfer_mode"], "manual")
+        self.assertFalse(sec["experimental"]["acknowledged"])
+
+    def test_experimental_code_is_isolated(self) -> None:
+        # Nothing outside poe_qol/experimental/ may import it at module
+        # level; the controller imports it lazily inside a function.
+        import ast
+        src = ROOT / "src" / "poe_qol"
+        for py in src.rglob("*.py"):
+            rel = py.relative_to(src).as_posix()
+            if rel.startswith("experimental/"):
+                continue
+            tree = ast.parse(py.read_text(encoding="utf-8"))
+            for node in tree.body:
+                if isinstance(node, ast.ImportFrom):
+                    names = [node.module or ""]
+                elif isinstance(node, ast.Import):
+                    names = [a.name for a in node.names]
+                else:
+                    continue
+                self.assertFalse([n for n in names if "experimental" in n], rel)
+        self.assertTrue((src / "experimental" / "bulk_ctrl_click.py").exists())
+
+    def test_experimental_module_declares_non_compliance(self) -> None:
+        from poe_qol.experimental.bulk_ctrl_click import (
+            ExperimentalCtrlClickTransfer,
+        )
+        self.assertFalse(ExperimentalCtrlClickTransfer.GGG_COMPLIANT)
+        from poe_qol.area_select.transfer import ManualTransfer
+        self.assertTrue(ManualTransfer.GGG_COMPLIANT)
 
 
 class BrandingTests(unittest.TestCase):

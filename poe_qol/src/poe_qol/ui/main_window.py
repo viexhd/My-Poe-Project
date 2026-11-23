@@ -5,10 +5,19 @@ Tabs:
     * Inventory   – 12×5 slot highlighter + slot profiles + overlay
     * Map Stash   – 12×6 slot highlighter for the Map stash tab
     * Map Search  – visual map mod exclusion → pathofexile.com/trade link
+    * Flipper     – poe.ninja-backed bulk currency flip ranking
+    * Pricer      – clipboard-driven trade-site price lookup
+    * Wealth      – divine/hour from Wealthy Exile CSV exports + overlay
+    * Area Select – Alt+drag multi-slot selection settings (manual /
+                    experimental transfer)
+
+Tools → Trade Browser opens the in-app pathofexile.com/trade window.
 
 Help → About shows GGG's required third-party disclaimer.
 """
 from __future__ import annotations
+
+import logging
 
 from PySide6.QtCore import Qt, QTimer
 from PySide6.QtGui import QAction, QKeySequence, QShortcut
@@ -23,16 +32,24 @@ from ..core.config import ConfigStore
 from ..core.state import AppState
 from ..engine.scheduler import Scheduler
 from .map_search_widget import MapSearchWidget
+from .area_select_widget import AreaSelectWidget
 from .slot_selector import SlotSelector
+from .flipper_widget import FlipperWidget
+from .pricer_widget import PricerWidget
+from .wealth_widget import WealthWidget
+
+log = logging.getLogger("poe_qol.ui.main_window")
 
 
 class MainWindow(QMainWindow):
     def __init__(self, cfg: ConfigStore, state: AppState,
-                 scheduler: Scheduler) -> None:
+                 scheduler: Scheduler, area_select=None) -> None:
         super().__init__()
         self.cfg = cfg
+        self.area_select = area_select   # AreaSelectController or None
         self.state = state
         self.scheduler = scheduler
+        self._trade_browser = None   # created on first use
 
         self.setWindowTitle(APP_NAME)
         # Larger default so the Map Search tab's category grid fits
@@ -46,7 +63,24 @@ class MainWindow(QMainWindow):
         tabs.addTab(self._build_macros_tab(), "Macros")
         tabs.addTab(self._build_inventory_tab(), "Inventory")
         tabs.addTab(self._build_map_stash_tab(), "Map Stash")
-        tabs.addTab(MapSearchWidget(cfg), "Map Search")
+        tabs.addTab(AreaSelectWidget(cfg, area_select), "Area Select")
+        open_in_app = (self.open_trade_browser
+                       if cfg.get("trade_browser.enabled", True) else None)
+        tabs.addTab(MapSearchWidget(cfg, open_in_app=open_in_app), "Map Search")
+        # Flipper needs repo root to locate its disk cache. Resolve
+        # the same way app.py does — two parents up from this file's
+        # package, then two more to reach the repo.
+        from pathlib import Path as _Path
+        repo_root = _Path(__file__).resolve().parents[3]
+        tabs.addTab(FlipperWidget(cfg, repo_root), "Flipper")
+        tabs.addTab(PricerWidget(cfg), "Pricer")
+        self._wealth = WealthWidget(cfg)
+        tabs.addTab(self._wealth, "Wealth")
+
+        tools_menu = self.menuBar().addMenu("&Tools")
+        browser_action = QAction("Trade Browser", self)
+        browser_action.triggered.connect(lambda: self.open_trade_browser(None))
+        tools_menu.addAction(browser_action)
 
         help_menu = self.menuBar().addMenu("&Help")
         about = QAction(f"About {APP_NAME}", self)
@@ -84,9 +118,11 @@ class MainWindow(QMainWindow):
         self.master.stateChanged.connect(self._on_master)
         v.addWidget(self.master)
 
-        self.estop = QPushButton("EMERGENCY STOP (F12)")
-        self.estop.setStyleSheet(
-            "background:#c00;color:white;font-weight:bold;padding:8px")
+        self.estop = QPushButton("Emergency stop (F12)")
+        # Themed via ui/styles.py: ghost-red by default, fills solid red
+        # when armed (`armed` property flipped on by _refresh_status).
+        self.estop.setProperty("role", "danger")
+        self.estop.setProperty("armed", False)
         self.estop.clicked.connect(self.scheduler.emergency_stop)
         v.addWidget(self.estop)
 
@@ -115,7 +151,8 @@ class MainWindow(QMainWindow):
         # bind-time so the user sees it instead of only learning
         # about it via the logs.
         self.conflict_label = QLabel("")
-        self.conflict_label.setStyleSheet("color:#e80;font-weight:bold;")
+        self.conflict_label.setStyleSheet(
+            "color:#E0A24A; font-weight:600;")
         self.conflict_label.setWordWrap(True)
         v.addWidget(self.conflict_label)
 
@@ -158,9 +195,36 @@ class MainWindow(QMainWindow):
             "A quality-of-life companion for Path of Exile.",
             "It never reads or changes game memory or game files, and "
             "never runs game input on a timer.",
+            "The optional experimental area transfer (off by default) "
+            "Ctrl-clicks several slots per gesture, which GGG's rules do "
+            "not allow.",
             "",
             DISCLAIMER,
         ])
+
+    def open_trade_browser(self, url: str | None = None) -> None:
+        """Show the in-app trade browser, optionally at ``url``."""
+        from .trade_browser import HOME_URL, create_trade_browser
+        league = self.cfg.get("trade.league", "Standard")
+        try:
+            if self._trade_browser is None:
+                self._trade_browser = create_trade_browser(league)
+            self._trade_browser.open(url or HOME_URL.format(league=league),
+                                     league=league)
+        except Exception as e:  # QtWebEngine missing / failed to start
+            log.exception("trade browser unavailable")
+            QMessageBox.warning(
+                self, "Trade Browser",
+                f"The in-app browser could not start ({e}). Opening your "
+                "normal browser instead.")
+            import webbrowser
+            webbrowser.open(url or HOME_URL.format(league=league))
+
+    def closeEvent(self, e) -> None:  # noqa: N802
+        self._wealth.shutdown()
+        if self._trade_browser is not None:
+            self._trade_browser.close()
+        super().closeEvent(e)
 
     def _show_about(self) -> None:
         QMessageBox.about(self, f"About {APP_NAME}", self.about_text())
@@ -186,7 +250,12 @@ class MainWindow(QMainWindow):
         elif not conflict and self.conflict_label.text():
             self.conflict_label.setText("")
 
-        if self.state.stop_event.is_set():
+        tripped = self.state.stop_event.is_set()
+        if self.estop.property("armed") != tripped:
+            from .styles import repolish
+            self.estop.setProperty("armed", tripped)
+            repolish(self.estop)
+        if tripped:
             self.status.setText(
                 "EMERGENCY STOP — re-check 'Global enabled' to resume")
             return

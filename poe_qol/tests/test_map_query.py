@@ -19,6 +19,7 @@ sys.path.insert(0, str(ROOT / "src"))
 
 from poe_qol.trade import MapDataset, build_map_query, build_url  # noqa: E402
 from poe_qol.trade.builder import _strip_stat_id  # noqa: E402
+from poe_qol.trade.map_query import PSEUDO_NUMBER_OF_AFFIX_MODS  # noqa: E402
 
 MAP_MODS = ROOT / "config" / "map_mods.yaml"
 
@@ -31,7 +32,9 @@ class MapDatasetTests(unittest.TestCase):
         self.assertTrue(self.ds.item_types)
         self.assertTrue(self.ds.categories)
         self.assertTrue(self.ds.mods)
-        self.assertTrue(self.ds.presets)
+        # Shipped presets were replaced by user-saved presets (stored in
+        # config/user.yaml), so the shipped list may be empty.
+        self.assertIsInstance(self.ds.presets, list)
 
     def test_every_mod_has_known_category_and_stat_id(self) -> None:
         cat_ids = {c.id for c in self.ds.categories}
@@ -63,7 +66,7 @@ class BuildMapQueryTests(unittest.TestCase):
     def test_exclusion_is_single_count_max_zero_group(self) -> None:
         q = build_map_query(self.ds, item_type_id="map_t16",
                             excluded_mod_ids=["no_regen", "less_recovery"],
-                            league="Mirage")
+                            league="Mirage", min_modifiers=None)
         stats = q["query"]["stats"]
         self.assertEqual(len(stats), 1)
         self.assertEqual(stats[0]["type"], "count")
@@ -83,16 +86,34 @@ class BuildMapQueryTests(unittest.TestCase):
                          {"min": 16, "max": 16})
         self.assertEqual(f["type_filters"]["filters"]["rarity"],
                          {"option": self.ds.defaults.rarity})
-        self.assertEqual(q["query"]["stats"], [])
+        # Only the default "# Modifiers" pseudo group; no exclusions.
+        self.assertEqual([s["filters"][0]["id"] for s in q["query"]["stats"]],
+                         [PSEUDO_NUMBER_OF_AFFIX_MODS])
+
+    def test_min_modifiers_emits_pseudo_and_group(self) -> None:
+        self.assertEqual(self.ds.defaults.min_modifiers, 8)
+        q = build_map_query(self.ds, item_type_id="map_t16",
+                            excluded_mod_ids=[])
+        (grp,) = q["query"]["stats"]
+        self.assertEqual(grp["type"], "and")
+        self.assertEqual(grp["filters"][0]["id"], PSEUDO_NUMBER_OF_AFFIX_MODS)
+        self.assertEqual(grp["filters"][0]["value"], {"min": 8})
+        for off in (0, None):
+            q = build_map_query(self.ds, item_type_id="map_t16",
+                                excluded_mod_ids=[], min_modifiers=off)
+            self.assertEqual(q["query"]["stats"], [], off)
 
     def test_explicit_none_disables_default_filters(self) -> None:
         q = build_map_query(self.ds, item_type_id="any",
-                            excluded_mod_ids=[], rarity=None, corrupted=None)
+                            excluded_mod_ids=[], rarity=None, corrupted=None,
+                            min_modifiers=None)
         self.assertNotIn("filters", q["query"])
+        self.assertEqual(q["query"]["stats"], [])
 
     def test_unknown_mod_ids_are_skipped(self) -> None:
         q = build_map_query(self.ds, item_type_id="map_t16",
-                            excluded_mod_ids=["not_a_real_mod"])
+                            excluded_mod_ids=["not_a_real_mod"],
+                            min_modifiers=None)
         self.assertEqual(q["query"]["stats"], [])
 
 
@@ -100,7 +121,8 @@ class BuildUrlTests(unittest.TestCase):
     def test_copy_mode_encodes_payload_without_private_keys(self) -> None:
         ds = MapDataset.load(MAP_MODS)
         q = build_map_query(ds, item_type_id="map_t16",
-                            excluded_mod_ids=["no_regen"], league="Mirage")
+                            excluded_mod_ids=["no_regen"], league="Mirage",
+                            min_modifiers=None)
         url = build_url(q, mode="copy",
                         base_site="https://www.pathofexile.com/trade/search")
         base, _, query = url.partition("?q=")

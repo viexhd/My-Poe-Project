@@ -90,3 +90,45 @@ def find_window(title_pattern: Optional[str] = "Path of Exile",
 
     user32.EnumWindows(EnumWindowsProc(_cb), 0)
     return found[0] if found else None
+
+
+class ForegroundMatcher:
+    """Callable: is the foreground window the game?
+
+    Cheap enough for the input-hook thread: the title / class lookup is
+    cached per window handle. Always False off Windows.
+    """
+
+    def __init__(self, title_pattern: Optional[str] = "Path of Exile",
+                 class_pattern: Optional[str] = None) -> None:
+        self._title_re = re.compile(title_pattern, re.IGNORECASE) if title_pattern else None
+        self._class_re = re.compile(class_pattern, re.IGNORECASE) if class_pattern else None
+        self._last_hwnd: Optional[int] = None
+        self._last_result = False
+        self._own_pid = 0
+        if sys.platform.startswith("win"):
+            import os
+            self._own_pid = os.getpid()
+
+    def __call__(self) -> bool:
+        if not sys.platform.startswith("win"):
+            return False
+        user32 = ctypes.windll.user32
+        user32.GetForegroundWindow.restype = wt.HWND
+        hwnd = user32.GetForegroundWindow()
+        if not hwnd:
+            return False
+        if hwnd == self._last_hwnd:
+            return self._last_result
+        buf = ctypes.create_unicode_buffer(512)
+        user32.GetWindowTextW(wt.HWND(hwnd), buf, 512)
+        title = buf.value
+        user32.GetClassNameW(wt.HWND(hwnd), buf, 512)
+        cls = buf.value
+        pid = wt.DWORD()
+        user32.GetWindowThreadProcessId(wt.HWND(hwnd), ctypes.byref(pid))
+        ok = pid.value != self._own_pid and bool(
+            (self._title_re and title and self._title_re.search(title))
+            or (self._class_re and cls and self._class_re.search(cls)))
+        self._last_hwnd, self._last_result = hwnd, ok
+        return ok

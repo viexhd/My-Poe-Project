@@ -1,5 +1,7 @@
 # UI / UX Proposal
 
+> **Update, 2026-11-23:** the palette below was superseded by the **"Scarlet Rot & Gilt"** identity in [`BRAND.md`](BRAND.md): warm obsidian surfaces, bone text, gilt primary, crimson highlights. The structure, components and navigation in this document still apply.
+
 Tags: **[V]** verified, **[R]** recommendation, **[A]** assumption.
 
 This builds on, rather than replaces, the token-based theme already written on the unmerged branch (`ui/styles.py` on `origin/claude/design-review-icon-nS8OE`). The colours below keep its values so that work isn't thrown away.

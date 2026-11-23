@@ -26,7 +26,7 @@ from pathlib import Path
 from typing import Callable, Optional
 
 import yaml
-from PySide6.QtCore import Qt, QTimer
+from PySide6.QtCore import QRectF, Qt, QTimer
 from PySide6.QtGui import QColor, QPainter
 from PySide6.QtWidgets import (
     QComboBox, QGridLayout, QHBoxLayout, QInputDialog, QLabel,
@@ -66,8 +66,9 @@ class SlotSelector(QWidget):
         rows = self.cfg.get(self._k("grid", "rows"), 5)
         cols = self.cfg.get(self._k("grid", "cols"), 12)
 
-        header = QLabel(f"{self.title} slots ({rows} × {cols})")
+        header = QLabel(f"{self.title} slots  ·  {rows} × {cols}")
         header.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        header.setProperty("role", "section")
         v.addWidget(header)
 
         grid_w = QWidget()
@@ -133,6 +134,7 @@ class SlotSelector(QWidget):
             "Highlight only: turn on the overlay, then Ctrl-click the "
             "highlighted slots yourself. Nothing is clicked for you.")
         hint.setWordWrap(True)
+        hint.setProperty("role", "caption")
         v.addWidget(hint)
 
         self._summary = QLabel()
@@ -140,11 +142,10 @@ class SlotSelector(QWidget):
         self._refresh_summary()
 
     def _style_button(self, b: QToolButton) -> None:
-        b.setStyleSheet("""
-            QToolButton            { background:#333; border:1px solid #555; }
-            QToolButton:checked    { background:#4a8; border:1px solid #7db; }
-            QToolButton:hover      { border:1px solid #aaa; }
-        """)
+        # Styling lives in ui/styles.py (QToolButton rules). Kept as a
+        # hook so individual cells can opt into variants later without
+        # touching callers.
+        pass
 
     # ---- selection ----
     def _current_selected(self) -> list[tuple[int, int]]:
@@ -318,53 +319,39 @@ class _OverlayWindow(QWidget):
     def _k(self, *parts: str) -> str:
         return ".".join((self.cfg_path, *parts))
 
-    def _current_origin(self) -> tuple[int, int]:
-        rel = self.cfg.get(self._k("origin_relative_to_window"))
-        if rel:
-            try:
-                from ..vision.window import find_window
-                rect = find_window(
-                    self.cfg.get(self._k("window", "title_pattern"),
-                                 "Path of Exile"),
-                    self.cfg.get(self._k("window", "class_pattern")),
-                )
-                if rect is not None:
-                    ax, ay = rect.anchor(rel.get("anchor", "top_left"))
-                    dx, dy = rel.get("offset", [0, 0])
-                    return (ax + int(dx), ay + int(dy))
-            except Exception:
-                pass
-        return tuple(  # type: ignore[return-value]
-            self.cfg.get(self._k("grid", "origin"), [0, 0]))
+    def _geometry(self):
+        # Shared with the Alt+drag area selection: window-relative origin,
+        # resolution scaling and grid.bounds are all handled there.
+        from ..area_select.grid import load_geometry
+        return load_geometry(self.cfg, self.cfg_path)
 
     def _reposition(self) -> None:
-        origin = self._current_origin()
-        cell = self.cfg.get(self._k("grid", "cell_size"), [53, 55])
-        rows = self.cfg.get(self._k("grid", "rows"), 5)
-        cols = self.cfg.get(self._k("grid", "cols"), 12)
-        pad = int(max(cell)) // 2 + 4
-        w = int(round(cols * cell[0])) + pad * 2
-        h = int(round(rows * cell[1])) + pad * 2
-        self._origin_cache = origin
-        self.setGeometry(origin[0] - pad, origin[1] - pad, w, h)
+        self._geom = self._geometry()
+        b = self._geom.bounds().expanded(4)
+        screen = self.screen()
+        self._dpr = float(screen.devicePixelRatio()) if screen else 1.0
+        d = self._dpr
+        x, y = int(b.left / d), int(b.top / d)
+        self._frame = b.translated(x * d - b.left, y * d - b.top)  # snapped
+        self.setGeometry(x, y, int(round(b.width / d)) + 1,
+                         int(round(b.height / d)) + 1)
+        self.update()
 
     def refresh(self, selected) -> None:
         self._selected = list(selected)
         self.update()
 
     def paintEvent(self, _e) -> None:  # noqa: N802
-        cell = self.cfg.get(self._k("grid", "cell_size"), [53, 55])
-        pad = int(max(cell)) // 2 + 4
-        size = int(min(cell))
         p = QPainter(self)
         p.setRenderHint(QPainter.RenderHint.Antialiasing)
         fill = QColor(80, 220, 140, 90)
         border = QColor(80, 220, 140, 220)
         p.setBrush(fill); p.setPen(border)
-        # Draw in widget-local coords. Cell size may be a float after
-        # full-grid calibration; round each highlight independently so
-        # accumulated drift stays below 1px on the far corner.
+        # Geometry is in physical px; the widget paints in logical px.
+        d, f = self._dpr, self._frame
+        size = min(self._geom.cell) / d
         for r, c in self._selected:
-            lx = int(round(pad + c * cell[0] - size / 2))
-            ly = int(round(pad + r * cell[1] - size / 2))
-            p.drawRoundedRect(lx, ly, size, size, 4, 4)
+            cx, cy = self._geom.slot_center((r, c))
+            lx = (cx - f.left) / d - size / 2
+            ly = (cy - f.top) / d - size / 2
+            p.drawRoundedRect(QRectF(lx, ly, size, size), 4, 4)
