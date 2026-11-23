@@ -22,6 +22,7 @@ import json
 import logging
 import webbrowser
 from pathlib import Path
+from typing import Callable
 
 from PySide6.QtCore import Qt
 from PySide6.QtGui import QGuiApplication
@@ -111,9 +112,13 @@ class _ModButton(QPushButton):
 
 
 class MapSearchWidget(QWidget):
-    def __init__(self, cfg: ConfigStore) -> None:
+    def __init__(self, cfg: ConfigStore,
+                 open_in_app: Callable[[str], None] | None = None) -> None:
         super().__init__()
         self.cfg = cfg
+        # Opens a URL in the in-app trade browser (MainWindow supplies
+        # it). None = use the system browser.
+        self._open_in_app = open_in_app
         self.dataset: MapDataset | None = None
         self._buttons: dict[str, _ModButton] = {}
         self._category_rows: list[tuple[str, QWidget]] = []
@@ -228,8 +233,15 @@ class MapSearchWidget(QWidget):
         actions = QHBoxLayout()
         self.open_btn = QPushButton("Open Trade")
         self.open_btn.setProperty("role", "primary")
+        self.open_btn.setToolTip(
+            "Open the pre-filled search on pathofexile.com/trade "
+            "(in the Trade Browser window when it is enabled).")
         self.open_btn.clicked.connect(self._open_trade)
         actions.addWidget(self.open_btn)
+
+        self.open_ext_btn = QPushButton("Open in my browser")
+        self.open_ext_btn.clicked.connect(lambda: self._open_trade(external=True))
+        actions.addWidget(self.open_ext_btn)
 
         self.copy_url_btn = QPushButton("Copy URL")
         self.copy_url_btn.clicked.connect(self._copy_url)
@@ -604,14 +616,17 @@ class MapSearchWidget(QWidget):
             QMessageBox.warning(self, "Trade link failed", str(e))
             return None
 
-    def _open_trade(self) -> None:
-        # POST mode hits the trade API and gets back a canonical URL
-        # that pathofexile.com/trade will actually render; the debug
-        # "copy" URL doesn't render there because the site expects a
-        # hash URL, not ?q=.
-        mode = self.cfg.get("trade.url_mode", "post")
-        url = self._build_url(mode if mode in ("post", "copy") else "post")
+    def _open_trade(self, external: bool = False) -> None:
+        # Default "copy" mode builds trade/search/<league>?q=<json>. The
+        # trade site runs that search itself when the page loads (the
+        # same link format Awakened PoE Trade opens), so no API call is
+        # made from this app. "post" mode is the older API-call path.
+        mode = self.cfg.get("trade.url_mode", "copy")
+        url = self._build_url(mode if mode in ("post", "copy") else "copy")
         if not url:
+            return
+        if self._open_in_app and not external:
+            self._open_in_app(url)
             return
         try:
             webbrowser.open(url)
@@ -622,7 +637,7 @@ class MapSearchWidget(QWidget):
         QGuiApplication.clipboard().setText(url)
 
     def _copy_url(self) -> None:
-        url = self._build_url(self.cfg.get("trade.url_mode", "post"))
+        url = self._build_url(self.cfg.get("trade.url_mode", "copy"))
         if url:
             QGuiApplication.clipboard().setText(url)
 

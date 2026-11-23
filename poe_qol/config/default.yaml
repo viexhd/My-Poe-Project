@@ -98,10 +98,12 @@ trade:
   status: online               # online | onlineleague | any
   item_type_id: map_t16        # default dropdown selection (see map_mods.yaml)
   mod_map_file: config/map_mods.yaml
-  # "post" POSTs to the PoE trade API and uses the canonical hash URL
-  # pathofexile.com/trade expects. "copy" builds a debug ?q= URL that
-  # is useful for inspection but won't render on the site.
-  url_mode: post
+  # "copy" (default) builds a pre-filled pathofexile.com/trade/search/
+  # <league>?q=<json> link. No API call is made; the trade site runs the
+  # search itself when the page opens (the same link format Awakened PoE
+  # Trade opens). "post" calls the trade site's internal search API from
+  # this app; see docs/COMPLIANCE_REVIEW.md before using it.
+  url_mode: copy
   base_site: https://www.pathofexile.com/trade/search
   base_api:  https://www.pathofexile.com/api/trade/search
   # Currently-selected (= excluded) mod ids. Persisted by the UI into
@@ -143,3 +145,24 @@ pricer:
   # When true, every Ctrl+C fires a trade-API lookup automatically.
   # Turn off if you prefer to browse items without spamming requests.
   auto_price_on_copy: true
+
+# ---- In-app trade browser ----
+# A browser window showing the real pathofexile.com. You log in there
+# yourself; Map Search opens its pre-filled search in it. The app never
+# reads the browser's cookies and only allows https://*.pathofexile.com
+# pages inside it (other links open in your normal browser). Its private
+# profile (cookies, cache) lives in %APPDATA%	wice-corrupted	rade-browser.
+trade_browser:
+  enabled: true              # false = Map Search opens your normal browser
+
+# ---- Divine-per-hour overlay ----
+# Reads ONLY the Wealthy Exile CSV files you export yourself
+# (wealthyexile.com: Stash -> ... -> Export CSV) into `exports_dir`, and
+# compares the two newest. Sends nothing and never logs into Wealthy Exile.
+wealth:
+  exports_dir: null          # folder you save Wealthy Exile exports to
+  assumed_unit: chaos        # unit of CSV values when the header doesn't say
+  chaos_per_divine: 0        # 0 = unknown (div/h hidden for chaos exports)
+  interval_minutes: 5        # folder re-check interval; minimum 5
+  overlay_visible: false
+  overlay_pos: null          # [x, y], written when you drag the overlay

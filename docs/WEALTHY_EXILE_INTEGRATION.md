@@ -1,6 +1,6 @@
 # Wealthy Exile Integration: Research and Proposal
 
-**Status: proposal only. Nothing is implemented, and approval is required before any work starts.**
+**Status (2026-11-23): Option B is partly built.** The **Wealth** tab and overlay compute divine-per-hour from the two newest CSV exports in a user-chosen folder (`economy/wealthy_exile_csv.py`, `economy/wealth_rate.py`). There is no SQLite history yet, and the dashboard, stash and history pages are still to come. **The real CSV layout is still unconfirmed.** Headers are matched loosely (a quantity column plus a price or total column), so please send a real export to lock it down. A live, logged-in feed is **not** built; it needs Wealthy Exile's permission.
 
 Tags: **[V]** verified (source and date), **[R]** recommendation, **[A]** assumption.
 

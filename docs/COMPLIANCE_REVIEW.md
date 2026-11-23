@@ -175,3 +175,14 @@ Add to the About page, README and first-run dialog:
 > This product isn't affiliated with or endorsed by Grinding Gear Games in any way.
 
 Add a **Transparency** panel listing exactly what the app reads and sends. Model it on Exile-UI's "Transparency Notice" [V] <https://github.com/Lailloken/Exile-UI>, and keep it in sync with the actual features.
+
+---
+
+## 6. Update 2026-11-23: Trade Browser, Map Search default, wealth overlay
+
+| Feature | What it does | Verdict |
+|---|---|---|
+| **Map Search default changed to `url_mode: copy`** | "Open Trade" now opens `pathofexile.com/trade/search/<league>?q=<json>`, and the trade site runs the search on page load. This is the same link format Awakened PoE Trade opens [V] `renderer/src/web/price-check/trade/TradeListing.vue:240`. No API call or spoofed UA on the default path. | ✅ Resolves the §2 Map Search concern by default. `post` mode remains opt-in. |
+| **Trade Browser** (QtWebEngine window) | An ordinary browser the user drives. It loads only `https://*.pathofexile.com` plus Steam's OpenID sign-in page, and sends any other link to the system browser. No script injection, no cookie reads. Cookies stay in its private profile, and "Sign out & clear" wipes them. | ✅ Website use by the player. We do **not** copy APT's approach of reusing the browser's cookies for app-made API calls [V] `main/src/proxy.ts` (`useSessionCookies: true`), because that reuses a Cloudflare clearance to automate requests (§3.4). |
+| **Divine-per-hour overlay** | Display-only, always-on-top window. Data comes only from Wealthy Exile CSV files the user exports. It re-reads a local folder on an interval (minimum 5 min). | ✅ No game input. No screen, clipboard or log reads. No requests to Wealthy Exile. |
+| Live Wealthy Exile feed (logged-in scraping or private endpoints) | — | ❌ Not built. Needs Wealthy Exile's permission (WEALTHY_EXILE_INTEGRATION §2, X1/X2). |
