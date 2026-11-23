@@ -21,7 +21,7 @@ These aren't features. They unblock everything else and remove risk.
 
 | Item | Why | Effort |
 |---|---|---|
-| **P0.1 Compliance fixes.** Default-disable or remove `life_flask`, `inventory_dump` and `map_stash_dump`. Add the GGG disclaimer. | COMPLIANCE_REVIEW §2.1. The current defaults break GGG's macro rules. | Small |
+| ✅ **P0.1 Compliance fixes. Done 2026-11-23:** `life_flask`, `inventory_dump` and `map_stash_dump` retired. GGG disclaimer added (Help → About). Product renamed to **Twice Corrupted**. | COMPLIANCE_REVIEW §2.1. The current defaults break GGG's macro rules. | Small |
 | **P0.2 Rebase and merge the design branch** (`styles.py`, Flipper, Pricer), fixing its compliance issues during the merge. | Avoids two diverging UIs. TECHNICAL_AUDIT §3.15. | Medium |
 | **P0.3 Foundations:** `core/paths.py` (user-data dir plus copy-migration), `ConfigStore` UTF-8 + atomic writes + validation, a shared `HttpClient` (honest UA, rate limiter, ETag cache, worker thread), F12 kept bound during calibration. | Fixes audit bugs §3.2, §3.3, §3.5–3.7, §3.10. Every later network feature reuses the HTTP client. | Medium |
 | **P0.4 App shell:** sidebar plus page registry, header (league, profile, status pill), toasts. | UI_UX_PROPOSAL §4. New pages stop touching `MainWindow`. | Medium |

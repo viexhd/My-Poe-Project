@@ -71,6 +71,14 @@ For every candidate I checked:
 | `build: declare deps …` | `pyproject.toml` declares its dependencies (plus a `vision` extra and a `poe-qol` script). Version upper bounds in `requirements.txt`. New `requirements-lock.txt`. Root `.gitignore` replaces `poe_qol/.gitignore`. | `pip install .` used to install nothing. Heavy optional dependencies are now opt-in. Reproducible environment. One ignore file covering runtime data, secrets and IDE files. |
 | `docs: update READMEs …` | Root and package READMEs rewritten. This audit and the verification report added. | Documentation matches the code. |
 
+### 4.1 Follow-up: compliance retirement and rename (branch `feat/twice-corrupted-compliance`)
+
+| Change | Reason |
+|---|---|
+| `macros/{life_flask,inventory_dump,map_stash_dump}.py` moved to `legacy/poe_qol_macros/`. `tests/test_inventory_grid.py` removed along with the code it tested. | Approved compliance plan (COMPLIANCE_REVIEW §2.1) |
+| Product, distribution and entry point renamed: **Twice Corrupted** / `twice-corrupted`. The import package and the `poe_qol/` folder are unchanged. | Owner's naming decision. Keeping the package name avoids breaking imports, `user.yaml` paths and the rebase of the design branch. |
+| `requirements.txt` no longer installs numpy, opencv and mss | No shipped feature uses them after the retirement. They remain available as the `vision` extra. |
+
 ## 5. Files kept on purpose, and why
 
 | File | Why it stays |

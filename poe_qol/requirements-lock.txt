@@ -2,6 +2,7 @@
 # (Windows 11, Python 3.14.2, verified 2026-11-23).
 #   pip install -r requirements-lock.txt
 #   pip install -e . --no-deps
+# Includes the optional `vision` extra (numpy, opencv-python, mss).
 keyboard==0.13.5
 mss==10.1.0
 numpy==2.4.4

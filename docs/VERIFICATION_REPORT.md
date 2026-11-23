@@ -12,7 +12,7 @@ Date: 2026-11-23 · Branch: `chore/research-audit-cleanup` · Machine: Windows 1
 | 2 | **Unit tests, after the cleanup** | Same command, existing `.venv` (Python 3.14.2, PySide6 6.11.0) | ✅ **12 run, 0 failures** |
 | 3 | **Characterisation tests written before removing dead code** | `test_map_query.py` run against the *unchanged* code first | ✅ 10/10, then still 10/10 after the removal |
 | 4 | **All module imports** | Smoke script walks `poe_qol.*` with `pkgutil.walk_packages` | ✅ 30/30 (full install). ✅ 28/30 on core-only, where only `vision.capture` and `vision.detect` are skipped, as designed (they need the optional `numpy`/`cv2`). |
-| 5 | **Entry point** | `poe_qol.app` imports. A fresh install creates `Scripts\poe-qol.exe`. | ✅ |
+| 5 | **Entry point** | `poe_qol.app` imports. A fresh install created `Scripts\poe-qol.exe`, renamed to `twice-corrupted` in the addendum below. | ✅ |
 | 6 | **Macro plugin discovery** | `Scheduler.load()` finds `coord_picker`, `inventory_dump`, `life_flask`, `map_stash_dump` | ✅ |
 | 7 | **Global hotkey registration and cleanup** | After `load()`, 9 bindings / 9 `keyboard` handles, including `emergency_stop` and `toggle_global`. After `shutdown()`, 0 / 0. | ✅ Real `keyboard` hooks were installed and removed. The keys were not pressed. |
 | 8 | **Config load / save** | On a temp copy of `config/`: load defaults, `set`, `save_user_overrides`, then reload. The override persists and the defaults still merge. | ✅ |
@@ -71,3 +71,18 @@ These are tracked in TECHNICAL_AUDIT §3 and roadmap P0.
 ## 4. Remaining technical debt (summary)
 
 User data in the source tree · no config schema or version · no shared HTTP client, rate limiter or cache · no page registry (tabs hard-coded) · inline stylesheets · daemon threads not joined on shutdown · no CI · no packaging or update pipeline. The ordered plan is in `FEATURE_ROADMAP.md` (M0–M1).
+
+---
+
+## Addendum: compliance retirement and rename (branch `feat/twice-corrupted-compliance`)
+
+| # | Check | Result |
+|---|---|---|
+| A1 | **Red first.** `tests/test_compliance.py` written before the change | ❌ 8/8 failed for the expected reasons (retired macros registered, F1–F4 hotkeys in config, Dump buttons present, title `PoE QoL`, no About) |
+| A2 | **Green.** Full suite after the change | ✅ 18 run, 0 failures (10 map-query + 8 compliance) |
+| A3 | **Offscreen smoke** (temp config copy) | ✅ 27 modules import. Only `coord_picker` is registered (4 hotkey bindings, all unbound on shutdown). Window title `Twice Corrupted`. Help menu present. 4 tabs. 21 map mods. |
+| A4 | **Backward compatibility with your real `config/user.yaml`** (read-only) | ✅ Saved `selected_slots`, `active_slot_profile`, map-stash `grid` and `origin_relative_to_window` overrides are all still applied |
+| A5 | **Renamed distribution** in your `.venv` (Python 3.14): `pip uninstall poe_qol`, then `pip install -e . --no-deps`, then delete the stale git-ignored `src/poe_qol.egg-info` | ✅ `pip list` shows only `twice-corrupted 0.1.0` (editable). `Scripts\twice-corrupted.exe` exists. `pip check` clean. 18/18 tests. |
+| A6 | **Fresh Python 3.12 venv** from the new `requirements.txt` (runtime only) plus `pip install -e .` | ✅ PySide6 6.12.0. **No numpy/opencv/mss pulled in.** `twice-corrupted.exe` created. 18/18 tests. Smoke 5/5 (vision modules correctly skipped as optional). `pip check` clean. |
+
+Still manual: open the overlay over the running game and run the calibration once. The highlight-only flow sends no input, so there is nothing else to exercise.

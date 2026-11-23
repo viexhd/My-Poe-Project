@@ -1,6 +1,6 @@
-# poe_qol: developer notes
+# Twice Corrupted: developer notes
 
-This is the developer guide. For the user guide, install steps and the compliance notice, see the [root README](../README.md).
+The import package is `poe_qol`; the product and distribution are **Twice Corrupted** (`twice-corrupted`). This is the developer guide. For the user guide, install steps and the compliance notice, see the [root README](../README.md).
 
 > This product isn't affiliated with or endorsed by Grinding Gear Games in any way.
 
@@ -9,7 +9,7 @@ This is the developer guide. For the user guide, install steps and the complianc
 * **PySide6** for the UI.
 * **pydirectinput-rgx** for input: `SendInput` with scancodes, which PoE accepts.
 * **keyboard** for global hotkeys (a `WH_KEYBOARD_LL` hook).
-* Optional **OpenCV + mss + numpy** (`pip install -e .[vision]`) for the template-match anchor. These are imported lazily, so the app runs without them.
+* Optional **OpenCV + mss + numpy** (`pip install -e .[vision]`) for `vision/capture.py` and `vision/detect.py`. No shipped feature uses them yet.
 
 ## Layout
 
@@ -22,9 +22,9 @@ src/poe_qol/
     input/              HotkeyRouter, InputSender
     vision/             mss capture, OpenCV detectors, Win32 window lookup
     engine/             Macro ABC, @register registry, Scheduler
-    macros/             one file per macro (plugin-style, auto-discovered)
+    macros/             one file per macro (plugin-style, auto-discovered): coord_picker
     trade/              map_query (MapDataset, build_map_query), builder (build_url)
-    ui/                 MainWindow, SlotSelector + overlay, CalibrateDialog, MapSearchWidget
+    ui/                 MainWindow (+ Help/About), SlotSelector + overlay, CalibrateDialog, MapSearchWidget
 tests/                  unittest suite
 ```
 
@@ -46,8 +46,9 @@ tests/                  unittest suite
 
 * `F12` emergency stop is always bound, with a Qt in-window fallback for when the global hook is blocked by UIPI.
 * `Pause` toggles the master switch.
-* Sweeps use interruptible waits (`Event.wait`), so F12 aborts mid-delay. Modifiers are released in `finally`.
+* Emergency stop also releases Ctrl/Shift/Alt in case anything held them.
 * Re-entry is guarded in the `Macro` base class.
+* `tests/test_compliance.py` fails if a timer or bulk-click macro is registered again, or if the slot tabs regain a Dump action.
 
 ## Map Search
 
@@ -65,7 +66,7 @@ When GGG changes a stat id between leagues, edit `map_mods.yaml`. No Python chan
 
 ## Visual slot selector
 
-The **Inventory** and **Map Stash** tabs render a config-driven grid of toggle buttons. Selection is written to `macros.<name>.selected_slots`. They provide:
+The **Inventory** and **Map Stash** tabs render a config-driven grid of toggle buttons. They are **highlight-only**: nothing is clicked for you. Selection is written to `macros.inventory_dump.selected_slots` / `macros.map_stash_dump.selected_slots`. Those names are historical and kept for `user.yaml` compatibility. They provide:
 
 * **All / None / Invert** bulk actions.
 * Named profiles under `slot_profile_dir`, applied with `active_slot_profile`.
@@ -79,4 +80,4 @@ python -m unittest discover -s poe_qol/tests -v
 ```
 
 * `test_map_query.py`: `MapDataset` loading of the shipped catalogue, `build_map_query` payload shape, `build_url` copy mode, stale-stat stripping.
-* `test_inventory_grid.py`: serpentine and row-major grid generation, slot filtering.
+* `test_compliance.py`: no retired macros registered, no input hotkeys in the shipped config, highlight-only slot tabs, product name, GGG disclaimer in About (offscreen Qt).

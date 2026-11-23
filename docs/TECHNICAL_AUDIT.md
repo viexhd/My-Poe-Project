@@ -1,5 +1,7 @@
 # Technical Audit
 
+> **Update, 2026-11-23:** the product is now **Twice Corrupted**. The retired macros (`life_flask`, `inventory_dump`, `map_stash_dump`) referenced below now live in `legacy/poe_qol_macros/`. Findings about them (§3.7 "flask keeps pressing", §3.12 sweep threads) are moot for the shipped app.
+
 Scope: every tracked file on `main` (commit `a0979ea`), plus the **unmerged** branch `origin/claude/design-review-icon-nS8OE` (4 commits, about +3,300 lines). I read the source itself rather than relying on the READMEs.
 
 Tags: **[V]** verified by running or reading code (with the command or `file:line`), **[R]** recommendation, **[A]** assumption.

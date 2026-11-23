@@ -143,7 +143,7 @@ Accessibility:
 The brief's flat list (Macros, Inventory, Stash, Mapping, Trading, Economy, Calculators, Profiles, Settings) is organised by *feature type*. The research suggests organising by **player intent** instead, because in-game use happens in transient overlays and the main window is for *planning and review* (RESEARCH_REPORT §2.1).
 
 ```
-┌ PoE QoL ─────────────────────────── [League: Mirage ▾] [Profile: Mapping ▾] ● Idle  ─ □ ✕ ┐
+┌ Twice Corrupted ─────────────────── [League: Mirage ▾] [Profile: Mapping ▾] ● Idle  ─ □ ✕ ┐
 │ ┌──────────────┐                                                                        │
 │ │ ⌂ Home       │                                                                        │
 │ │──── PLAY ────│                                                                        │

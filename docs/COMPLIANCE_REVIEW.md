@@ -1,4 +1,6 @@
-# Compliance Review
+# Compliance Review: Twice Corrupted
+
+> **Status, 2026-11-23:** the §2.1 plan was **approved and implemented** (commit `d5e5be1`, branch `feat/twice-corrupted-compliance`). The life-flask timer and both dump sweeps are retired, the slot tabs are highlight-only, Help → About shows the GGG disclaimer, and `tests/test_compliance.py` guards all of it. Still open: the Map Search trade-API call (honest UA, rate limiting) and the branch's Pricer and Flipper.
 
 > **Not legal advice, no guarantees.** This review applies a *conservative* reading of Grinding Gear Games' (GGG) published rules. GGG does not certify third-party tools, and nothing here guarantees an account will not be actioned. When this document says "compliant" it means "consistent with the conservative reading of the published text", nothing more.
 

@@ -3,9 +3,9 @@ requires = ["setuptools>=68"]
 build-backend = "setuptools.build_meta"
 
 [project]
-name = "poe_qol"
+name = "twice-corrupted"
 version = "0.1.0"
-description = "Quality-of-life companion app for Path of Exile"
+description = "Twice Corrupted: a quality-of-life companion for Path of Exile"
 requires-python = ">=3.11"
 readme = "README.md"
 # Runtime dependencies. Ranges are bounded to the major versions this
@@ -19,17 +19,18 @@ dependencies = [
 ]
 
 [project.optional-dependencies]
-# Only needed for `anchor_template` (OpenCV template matching), which is
-# off by default. The modules are imported lazily, so the app runs
-# without them.
+# Screen capture + OpenCV template matching (src/poe_qol/vision/).
+# No shipped feature uses them since the dump sweep was retired; kept as
+# an opt-in extra for future on-key-press features.
 vision = [
     "numpy>=1.26,<3",
     "opencv-python>=4.9,<5",
     "mss>=9.0,<11",
 ]
 
+# The import package keeps its original name, poe_qol.
 [project.scripts]
-poe-qol = "poe_qol.app:run"
+twice-corrupted = "poe_qol.app:run"
 
 [tool.setuptools.packages.find]
 where = ["src"]

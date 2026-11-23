@@ -1,11 +1,8 @@
-# Full install (runtime + optional vision extra), used by run.bat.
-# Mirrors pyproject.toml. For an exact, known-good environment use
-# requirements-lock.txt instead.
+# Runtime dependencies, used by run.bat. Mirrors pyproject.toml.
+# For an exact, known-good environment use requirements-lock.txt.
 PySide6>=6.6,<7
 PyYAML>=6.0,<7
 keyboard>=0.13.5,<0.14
 pydirectinput-rgx>=2.1,<3
-# vision extra (optional; only for anchor_template)
-numpy>=1.26,<3
-opencv-python>=4.9,<5
-mss>=9.0,<11
+# Optional vision extra (not used by any shipped feature):
+#   pip install -e .[vision]
