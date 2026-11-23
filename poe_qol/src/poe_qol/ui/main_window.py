@@ -7,10 +7,15 @@ Tabs:
     * Map Search  – visual map mod exclusion → pathofexile.com/trade link
     * Flipper     – poe.ninja-backed bulk currency flip ranking
     * Pricer      – clipboard-driven trade-site price lookup
+    * Wealth      – divine/hour from Wealthy Exile CSV exports + overlay
+
+Tools → Trade Browser opens the in-app pathofexile.com/trade window.
 
 Help → About shows GGG's required third-party disclaimer.
 """
 from __future__ import annotations
+
+import logging
 
 from PySide6.QtCore import Qt, QTimer
 from PySide6.QtGui import QAction, QKeySequence, QShortcut
@@ -28,6 +33,9 @@ from .map_search_widget import MapSearchWidget
 from .slot_selector import SlotSelector
 from .flipper_widget import FlipperWidget
 from .pricer_widget import PricerWidget
+from .wealth_widget import WealthWidget
+
+log = logging.getLogger("poe_qol.ui.main_window")
 
 
 class MainWindow(QMainWindow):
@@ -37,6 +45,7 @@ class MainWindow(QMainWindow):
         self.cfg = cfg
         self.state = state
         self.scheduler = scheduler
+        self._trade_browser = None   # created on first use
 
         self.setWindowTitle(APP_NAME)
         # Larger default so the Map Search tab's category grid fits
@@ -50,7 +59,9 @@ class MainWindow(QMainWindow):
         tabs.addTab(self._build_macros_tab(), "Macros")
         tabs.addTab(self._build_inventory_tab(), "Inventory")
         tabs.addTab(self._build_map_stash_tab(), "Map Stash")
-        tabs.addTab(MapSearchWidget(cfg), "Map Search")
+        open_in_app = (self.open_trade_browser
+                       if cfg.get("trade_browser.enabled", True) else None)
+        tabs.addTab(MapSearchWidget(cfg, open_in_app=open_in_app), "Map Search")
         # Flipper needs repo root to locate its disk cache. Resolve
         # the same way app.py does — two parents up from this file's
         # package, then two more to reach the repo.
@@ -58,6 +69,13 @@ class MainWindow(QMainWindow):
         repo_root = _Path(__file__).resolve().parents[3]
         tabs.addTab(FlipperWidget(cfg, repo_root), "Flipper")
         tabs.addTab(PricerWidget(cfg), "Pricer")
+        self._wealth = WealthWidget(cfg)
+        tabs.addTab(self._wealth, "Wealth")
+
+        tools_menu = self.menuBar().addMenu("&Tools")
+        browser_action = QAction("Trade Browser", self)
+        browser_action.triggered.connect(lambda: self.open_trade_browser(None))
+        tools_menu.addAction(browser_action)
 
         help_menu = self.menuBar().addMenu("&Help")
         about = QAction(f"About {APP_NAME}", self)
@@ -175,6 +193,30 @@ class MainWindow(QMainWindow):
             "",
             DISCLAIMER,
         ])
+
+    def open_trade_browser(self, url: str | None = None) -> None:
+        """Show the in-app trade browser, optionally at ``url``."""
+        from .trade_browser import HOME_URL, create_trade_browser
+        league = self.cfg.get("trade.league", "Standard")
+        try:
+            if self._trade_browser is None:
+                self._trade_browser = create_trade_browser(league)
+            self._trade_browser.open(url or HOME_URL.format(league=league),
+                                     league=league)
+        except Exception as e:  # QtWebEngine missing / failed to start
+            log.exception("trade browser unavailable")
+            QMessageBox.warning(
+                self, "Trade Browser",
+                f"The in-app browser could not start ({e}). Opening your "
+                "normal browser instead.")
+            import webbrowser
+            webbrowser.open(url or HOME_URL.format(league=league))
+
+    def closeEvent(self, e) -> None:  # noqa: N802
+        self._wealth.shutdown()
+        if self._trade_browser is not None:
+            self._trade_browser.close()
+        super().closeEvent(e)
 
     def _show_about(self) -> None:
         QMessageBox.about(self, f"About {APP_NAME}", self.about_text())

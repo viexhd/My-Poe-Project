@@ -86,3 +86,15 @@ User data in the source tree · no config schema or version · no shared HTTP cl
 | A6 | **Fresh Python 3.12 venv** from the new `requirements.txt` (runtime only) plus `pip install -e .` | ✅ PySide6 6.12.0. **No numpy/opencv/mss pulled in.** `twice-corrupted.exe` created. 18/18 tests. Smoke 5/5 (vision modules correctly skipped as optional). `pip check` clean. |
 
 Still manual: open the overlay over the running game and run the calibration once. The highlight-only flow sends no input, so there is nothing else to exercise.
+
+## Addendum: Trade Browser and wealth overlay (branch `feat/trade-browser-wealth-overlay`)
+
+| # | Check | Result |
+|---|---|---|
+| B1 | Red first: `test_wealth.py` + `test_trade_browser.py` written before the code | ❌ Both modules failed to import (the modules didn't exist yet) |
+| B2 | Full suite | ✅ 61 run, 0 failures |
+| B3 | Offscreen smoke | ✅ 43 modules import (only the optional `PIL` tool is skipped). 7 tabs including **Wealth**. Menus are **Tools** and **Help**. |
+| B4 | **Real QtWebEngine run** of the Trade Browser: temporary profile, system browser stubbed out | ✅ `pathofexile.com` navigation is allowed. `poe.ninja` is refused and handed to the system browser, both by link click and by `open()`. The pre-filled `?q=` search URL loads, and the page stops at Cloudflare's "Just a moment…" check, which a person completes in the visible window (not bypassed). The temporary profile was deleted afterwards. |
+| B5 | Your `config/user.yaml` has no `trade.url_mode` override | ✅ The new `copy` default applies |
+
+Still manual: log in through the Trade Browser and confirm the pre-filled search shows results. Export two Wealthy Exile CSVs and confirm that their columns parse and the overlay shows a sensible div/h over the running game.

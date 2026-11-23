@@ -4,6 +4,7 @@ from __future__ import annotations
 import sys
 from pathlib import Path
 
+from PySide6.QtCore import QCoreApplication, Qt
 from PySide6.QtWidgets import QApplication
 
 from . import APP_ID, APP_NAME, __version__
@@ -36,6 +37,9 @@ def run() -> int:
     scheduler = Scheduler(cfg, state, sender, hotkeys)
     scheduler.load()
 
+    # Required before QApplication when QtWebEngine (Trade Browser) is
+    # imported later on.
+    QCoreApplication.setAttribute(Qt.ApplicationAttribute.AA_ShareOpenGLContexts)
     qapp = QApplication(sys.argv)
     qapp.setApplicationName(APP_ID)
     qapp.setApplicationDisplayName(APP_NAME)

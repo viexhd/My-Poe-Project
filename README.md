@@ -15,9 +15,20 @@ A desktop quality-of-life companion for **Path of Exile**, built with Python and
 | **Macros** | Master on/off switch, per-macro toggles and hotkeys, **F12** emergency stop, **Pause** master toggle | None |
 | **Inventory** | Clickable 12×5 grid, named slot profiles, a click-through **overlay** that highlights the chosen slots over the game, cursor-and-hotkey **calibration**. You click the highlighted slots yourself. | None |
 | **Map Stash** | The same highlighter for a 12×6 map stash tab | None |
-| **Map Search** | Pick map mods to exclude, with presets (RF Safe, No Reflect…), rarity, corrupted and tier. Opens the search on pathofexile.com/trade. | None. It uses the trade site's search API (see the compliance doc §2) |
+| **Map Search** | Pick map mods to exclude, set rarity, corrupted, tier and a minimum "# Modifiers", and save your own presets. **Open Trade** opens the pre-filled search (`/trade/search/<league>?q=…`) in the Trade Browser; **Open in my browser** uses your normal browser instead. | None. By default no API call is made; the trade site runs the search when the page opens. |
+| **Tools → Trade Browser** | A browser window showing the real pathofexile.com/trade. Log in there yourself (email or Steam sign-in). Only `pathofexile.com` pages load inside it, and other links open in your normal browser. **Sign out & clear** wipes its cookies. The app never reads them. | None |
+| **Wealth** | **Divine per hour** from your Wealthy Exile CSV exports: it compares the two newest exports in a folder you pick and re-checks it every N minutes (minimum 5). Includes an optional **always-on-top overlay** over the game that you can drag and right-click. | None. Reads only your CSV files and never logs into Wealthy Exile. |
+| **Flipper** | Ranks currencies to flip using poe.ninja prices | None |
+| **Pricer** | Prices a copied item using the trade site | None. ⚠️ It calls the trade site's search API; see the compliance doc. |
 | **Coordinate picker** | Ctrl+Alt+C saves the cursor position, Ctrl+Alt+V lists the saved positions | None |
 | **Help → About** | Version and the GGG disclaimer | — |
+
+**Divine-per-hour workflow:**
+1. On wealthyexile.com press **Sync stash**.
+2. Open **⋯ → Export CSV** and save the file into your exports folder.
+3. Repeat later.
+
+The overlay shows the change between your last two exports. Each export's Divine Orb row supplies the chaos-per-divine rate automatically, or you can set your own. The export time comes from the file name Wealthy Exile gives it (`Wealthy-Exile-export-MM_DD_YYYY H_MM.csv`). It needs PoE in windowed or windowed-fullscreen mode. A live Wealthy Exile feed isn't built: Wealthy Exile has no public API, so that would need their permission (see [`docs/WEALTHY_EXILE_INTEGRATION.md`](docs/WEALTHY_EXILE_INTEGRATION.md)).
 
 **Under the hood**
 
