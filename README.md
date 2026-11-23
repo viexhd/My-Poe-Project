@@ -1,3 +1,22 @@
+<p align="center">
+  <img src="poe_qol/assets/banner.png" alt="Twice Corrupted: a quality-of-life companion for Path of Exile" width="100%">
+</p>
+
+<p align="center">
+  <img alt="Python 3.11+" src="https://img.shields.io/badge/python-3.11%2B-D9B25A?style=flat-square&labelColor=141012">
+  <img alt="Windows" src="https://img.shields.io/badge/platform-Windows-D9B25A?style=flat-square&labelColor=141012">
+  <img alt="PySide6" src="https://img.shields.io/badge/UI-PySide6-D9B25A?style=flat-square&labelColor=141012">
+  <img alt="GGG macro rules: one action per key" src="https://img.shields.io/badge/GGG%20rules-one%20action%20per%20key-B3122E?style=flat-square&labelColor=141012">
+</p>
+
+<p align="center">
+  <a href="#features">Features</a> ·
+  <a href="#install-and-run">Install</a> ·
+  <a href="#configuration">Configuration</a> ·
+  <a href="#documentation">Docs</a> ·
+  <a href="docs/BRAND.md">Design</a>
+</p>
+
 # Twice Corrupted
 
 A desktop quality-of-life companion for **Path of Exile**, built with Python and PySide6. It brings map-search trade links, inventory and map-stash slot highlighting, calibration and overlays together in one window, and is being developed into a fuller companion app. The roadmap is in [`docs/`](docs/).
@@ -119,6 +138,7 @@ poe_qol\.venv\Scripts\python -m unittest discover -s poe_qol/tests -v
 | [`docs/WEALTHY_EXILE_INTEGRATION.md`](docs/WEALTHY_EXILE_INTEGRATION.md) | Wealthy Exile integration feasibility and proposal |
 | [`docs/REPOSITORY_AUDIT.md`](docs/REPOSITORY_AUDIT.md) | What the cleanup changed and why |
 | [`docs/VERIFICATION_REPORT.md`](docs/VERIFICATION_REPORT.md) | What was tested, known issues |
+| [`docs/BRAND.md`](docs/BRAND.md) | Visual identity: palette, icon, banner, type |
 
 ## Repository layout
 
@@ -127,6 +147,7 @@ Twice-Corrupted/
 docs/                     research, audit, roadmap and design documents
 legacy/                   archived scripts and retired macros (reference only, not used)
 poe_qol/
+    assets/               app icon, banner, social preview (+ brand/icon.svg source)
     config/               default.yaml, profiles, slot profiles, map mod catalogue
     src/poe_qol/
         core/             config, shared state, logging
@@ -136,8 +157,16 @@ poe_qol/
         vision/           window lookup (+ optional capture / template matching)
         trade/            Map Search query builder and trade URL
         ui/               Qt main window and tab widgets
+        economy/          poe.ninja flipper, Wealthy Exile CSV + divine/hour
+        tools/            build_brand (renders the icon / banner assets)
     tests/                unittest suite
     pyproject.toml        package metadata and dependencies
     requirements*.txt     runtime install / exact lock
     run.bat, run-admin.bat
 ```
+
+## Design
+
+The visual identity, **"scarlet rot & gilt"**, uses warm obsidian surfaces, bone-white text, gilt-gold actions and crimson highlights. It centres on an original two-layer bloom of blade-curved petals inside a cracked gold ring: *twice corrupted*. Its mood is inspired by Malenia from *Elden Ring*. It is fan inspiration only, and no FromSoftware or Grinding Gear Games artwork, logos or likenesses are used. Details and rebuild steps are in [`docs/BRAND.md`](docs/BRAND.md).
+
+<p align="center"><img src="poe_qol/assets/app_icon.png" alt="Twice Corrupted icon" width="128"></p>

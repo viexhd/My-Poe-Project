@@ -119,8 +119,8 @@ class PricerWidget(QWidget):
         self.summary = QLabel("Ctrl+C an item in Path of Exile to price it.")
         self.summary.setWordWrap(True)
         self.summary.setStyleSheet(
-            "padding:10px; background:#151A22; border:1px solid #2A3240;"
-            " border-radius:6px; color:#E6EAF2;")
+            "padding:10px; background:#141012; border:1px solid #33262A;"
+            " border-radius:6px; color:#EFE6DA;")
         v.addWidget(self.summary)
 
         # Price card.
@@ -128,7 +128,7 @@ class PricerWidget(QWidget):
         self.price_card.setWordWrap(True)
         self.price_card.setTextFormat(Qt.TextFormat.RichText)
         self.price_card.setStyleSheet(
-            "padding:10px; background:#1C222C; border:1px solid #2A3240;"
+            "padding:10px; background:#1C1518; border:1px solid #33262A;"
             " border-radius:6px;")
         v.addWidget(self.price_card)
 
@@ -238,7 +238,7 @@ class PricerWidget(QWidget):
     def _render_summary(self, item: ParsedItem) -> None:
         parts = [f"<b>{_html_escape(item.name)}</b>"]
         if item.base_type and item.base_type != item.name:
-            parts.append(f"<span style='color:#A9B2C3'>"
+            parts.append(f"<span style='color:#BEB0A4'>"
                          f"{_html_escape(item.base_type)}</span>")
         meta: list[str] = [item.rarity]
         if item.item_class:
@@ -253,7 +253,7 @@ class PricerWidget(QWidget):
             meta.append(f"Stack {item.stack_size[0]}/{item.stack_size[1]}")
         if item.corrupted:
             meta.append("<span style='color:#D9544A'>Corrupted</span>")
-        parts.append("<span style='color:#A9B2C3'>"
+        parts.append("<span style='color:#BEB0A4'>"
                      + " · ".join(_html_escape(m) for m in meta) + "</span>")
         self.summary.setText("<br>".join(parts))
 
@@ -265,7 +265,7 @@ class PricerWidget(QWidget):
         if r.effective_floor is not None and r.effective_floor != r.floor:
             lines.append(
                 f"<b>Effective floor (ignoring stale):</b> "
-                f"<span style='color:#E8B057'>"
+                f"<span style='color:#D9B25A'>"
                 f"{_fmt_price(r.effective_floor, r.floor_currency)}</span>")
         if r.stale_count:
             frac = r.stale_fraction * 100
@@ -278,7 +278,7 @@ class PricerWidget(QWidget):
                 f"<a href='{r.search_url}' style='color:#4FA7E3'>"
                 f"Open on pathofexile.com/trade →</a>")
         for n in r.notes:
-            lines.append(f"<span style='color:#A9B2C3'>· "
+            lines.append(f"<span style='color:#BEB0A4'>· "
                          f"{_html_escape(n)}</span>")
         self.price_card.setText("<br>".join(lines) if lines
                                 else "No pricing data.")

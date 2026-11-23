@@ -1,7 +1,8 @@
 """App icon / branding helpers.
 
-Looks for an icon file on disk so the user can drop in a new PNG
-without code changes. Search order (first match wins):
+Loads the Twice Corrupted icon (generated from assets/brand/icon.svg
+by ``python -m poe_qol.tools.build_brand``). Search order (first match
+wins):
 
     <repo>/poe_qol/assets/app_icon.png
     <repo>/poe_qol/assets/app_icon.ico

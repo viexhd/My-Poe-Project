@@ -1,0 +1,78 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1024 1024" width="1024" height="1024">
+  <!-- Twice Corrupted - app icon. Original artwork: a two-layer "scarlet rot"
+       bloom of blade-curved petals inside a cracked gilt ring. -->
+  <defs>
+    <radialGradient id="tileBg" cx="512" cy="430" r="640" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#3B0C17"/>
+      <stop offset="0.55" stop-color="#170A0E"/>
+      <stop offset="1" stop-color="#0A0708"/>
+    </radialGradient>
+    <radialGradient id="glow" cx="512" cy="512" r="360" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#E0482F" stop-opacity="0.55"/>
+      <stop offset="0.6" stop-color="#B3122E" stop-opacity="0.18"/>
+      <stop offset="1" stop-color="#B3122E" stop-opacity="0"/>
+    </radialGradient>
+    <linearGradient id="petalOuter" x1="0" y1="-60" x2="0" y2="-372" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#4E0814"/>
+      <stop offset="0.45" stop-color="#A8122C"/>
+      <stop offset="1" stop-color="#E23A33"/>
+    </linearGradient>
+    <linearGradient id="petalInner" x1="0" y1="-40" x2="0" y2="-250" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#8E0F24"/>
+      <stop offset="0.6" stop-color="#D42A38"/>
+      <stop offset="1" stop-color="#F57A48"/>
+    </linearGradient>
+    <linearGradient id="gilt" x1="0" y1="80" x2="0" y2="944" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#F2DE9F"/>
+      <stop offset="0.5" stop-color="#C9A24A"/>
+      <stop offset="1" stop-color="#8A6524"/>
+    </linearGradient>
+    <radialGradient id="seed" cx="498" cy="496" r="70" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#FBEFC4"/>
+      <stop offset="0.5" stop-color="#D9B25A"/>
+      <stop offset="1" stop-color="#7A5A1E"/>
+    </radialGradient>
+  </defs>
+  <g id="tile">
+    <rect x="0" y="0" width="1024" height="1024" rx="210" ry="210" fill="url(#tileBg)"/>
+    <rect x="6" y="6" width="1012" height="1012" rx="204" ry="204" fill="none" stroke="#4A2A2F" stroke-width="4"/>
+  </g>
+  <g id="bloom">
+    <circle cx="512" cy="512" r="360" fill="url(#glow)"/>
+    <path d="M746.9,163.8 A420,420 0 1 1 641.8,112.6" fill="none" stroke="url(#gilt)" stroke-width="16" stroke-linecap="round"/>
+    <path d="M681.9,121.3 A426,426 0 0 1 715.3,137.6" fill="none" stroke="url(#gilt)" stroke-width="12" stroke-linecap="round" transform="translate(10,-8)"/>
+    <circle cx="512" cy="512" r="392" fill="none" stroke="#C9A24A" stroke-opacity="0.35" stroke-width="3"/>
+    <rect x="921.0" y="501.0" width="22" height="22" fill="#F2DE9F" stroke="#7A5A1E" stroke-width="2" transform="rotate(45 932.0 512.0)"/>
+    <rect x="501.0" y="921.0" width="22" height="22" fill="#F2DE9F" stroke="#7A5A1E" stroke-width="2" transform="rotate(45 512.0 932.0)"/>
+    <rect x="81.0" y="501.0" width="22" height="22" fill="#F2DE9F" stroke="#7A5A1E" stroke-width="2" transform="rotate(45 92.0 512.0)"/>
+    <rect x="798.0" y="798.0" width="22" height="22" fill="#F2DE9F" stroke="#7A5A1E" stroke-width="2" transform="rotate(45 809.0 809.0)"/>
+    <rect x="204.0" y="798.0" width="22" height="22" fill="#F2DE9F" stroke="#7A5A1E" stroke-width="2" transform="rotate(45 215.0 809.0)"/>
+    <rect x="204.0" y="204.0" width="22" height="22" fill="#F2DE9F" stroke="#7A5A1E" stroke-width="2" transform="rotate(45 215.0 215.0)"/>
+    <path d="M0,-58 C64,-140 96,-250 22,-372 C10,-338 -30,-306 -46,-252 C-66,-182 -42,-112 0,-58 Z" fill="url(#petalOuter)" stroke="#2A0509" stroke-width="3" transform="translate(512,512) rotate(0)"/>
+    <path d="M0,-58 C64,-140 96,-250 22,-372 C10,-338 -30,-306 -46,-252 C-66,-182 -42,-112 0,-58 Z" fill="url(#petalOuter)" stroke="#2A0509" stroke-width="3" transform="translate(512,512) rotate(45)"/>
+    <path d="M0,-58 C64,-140 96,-250 22,-372 C10,-338 -30,-306 -46,-252 C-66,-182 -42,-112 0,-58 Z" fill="url(#petalOuter)" stroke="#2A0509" stroke-width="3" transform="translate(512,512) rotate(90)"/>
+    <path d="M0,-58 C64,-140 96,-250 22,-372 C10,-338 -30,-306 -46,-252 C-66,-182 -42,-112 0,-58 Z" fill="url(#petalOuter)" stroke="#2A0509" stroke-width="3" transform="translate(512,512) rotate(135)"/>
+    <path d="M0,-58 C64,-140 96,-250 22,-372 C10,-338 -30,-306 -46,-252 C-66,-182 -42,-112 0,-58 Z" fill="url(#petalOuter)" stroke="#2A0509" stroke-width="3" transform="translate(512,512) rotate(180)"/>
+    <path d="M0,-58 C64,-140 96,-250 22,-372 C10,-338 -30,-306 -46,-252 C-66,-182 -42,-112 0,-58 Z" fill="url(#petalOuter)" stroke="#2A0509" stroke-width="3" transform="translate(512,512) rotate(225)"/>
+    <path d="M0,-58 C64,-140 96,-250 22,-372 C10,-338 -30,-306 -46,-252 C-66,-182 -42,-112 0,-58 Z" fill="url(#petalOuter)" stroke="#2A0509" stroke-width="3" transform="translate(512,512) rotate(270)"/>
+    <path d="M0,-58 C64,-140 96,-250 22,-372 C10,-338 -30,-306 -46,-252 C-66,-182 -42,-112 0,-58 Z" fill="url(#petalOuter)" stroke="#2A0509" stroke-width="3" transform="translate(512,512) rotate(315)"/>
+    <path d="M0,-40 C46,-96 66,-170 14,-250 C6,-228 -22,-206 -32,-170 C-46,-122 -30,-78 0,-40 Z" fill="url(#petalInner)" stroke="#3A0610" stroke-width="2.5" transform="translate(512,512) rotate(22.5)"/>
+    <path d="M0,-40 C46,-96 66,-170 14,-250 C6,-228 -22,-206 -32,-170 C-46,-122 -30,-78 0,-40 Z" fill="url(#petalInner)" stroke="#3A0610" stroke-width="2.5" transform="translate(512,512) rotate(67.5)"/>
+    <path d="M0,-40 C46,-96 66,-170 14,-250 C6,-228 -22,-206 -32,-170 C-46,-122 -30,-78 0,-40 Z" fill="url(#petalInner)" stroke="#3A0610" stroke-width="2.5" transform="translate(512,512) rotate(112.5)"/>
+    <path d="M0,-40 C46,-96 66,-170 14,-250 C6,-228 -22,-206 -32,-170 C-46,-122 -30,-78 0,-40 Z" fill="url(#petalInner)" stroke="#3A0610" stroke-width="2.5" transform="translate(512,512) rotate(157.5)"/>
+    <path d="M0,-40 C46,-96 66,-170 14,-250 C6,-228 -22,-206 -32,-170 C-46,-122 -30,-78 0,-40 Z" fill="url(#petalInner)" stroke="#3A0610" stroke-width="2.5" transform="translate(512,512) rotate(202.5)"/>
+    <path d="M0,-40 C46,-96 66,-170 14,-250 C6,-228 -22,-206 -32,-170 C-46,-122 -30,-78 0,-40 Z" fill="url(#petalInner)" stroke="#3A0610" stroke-width="2.5" transform="translate(512,512) rotate(247.5)"/>
+    <path d="M0,-40 C46,-96 66,-170 14,-250 C6,-228 -22,-206 -32,-170 C-46,-122 -30,-78 0,-40 Z" fill="url(#petalInner)" stroke="#3A0610" stroke-width="2.5" transform="translate(512,512) rotate(292.5)"/>
+    <path d="M0,-40 C46,-96 66,-170 14,-250 C6,-228 -22,-206 -32,-170 C-46,-122 -30,-78 0,-40 Z" fill="url(#petalInner)" stroke="#3A0610" stroke-width="2.5" transform="translate(512,512) rotate(337.5)"/>
+    <circle cx="512" cy="512" r="62" fill="url(#seed)" stroke="#5A3F12" stroke-width="3"/>
+    <circle cx="512" cy="512" r="24" fill="#5E0A18"/>
+    <circle cx="496" cy="494" r="9" fill="#FFF6D8" fill-opacity="0.8"/>
+    <circle cx="742" cy="262" r="14" fill="#E0482F" fill-opacity="0.85"/>
+    <circle cx="790" cy="214" r="9" fill="#F57A48" fill-opacity="0.7"/>
+    <circle cx="700" cy="196" r="7" fill="#C21F3A" fill-opacity="0.7"/>
+    <circle cx="836" cy="300" r="6" fill="#E0482F" fill-opacity="0.55"/>
+    <circle cx="812" cy="158" r="5" fill="#F57A48" fill-opacity="0.5"/>
+    <circle cx="268" cy="790" r="8" fill="#C21F3A" fill-opacity="0.5"/>
+    <circle cx="226" cy="742" r="5" fill="#E0482F" fill-opacity="0.45"/>
+  </g>
+</svg>
