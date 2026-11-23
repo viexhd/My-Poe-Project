@@ -68,11 +68,11 @@ class CalibrateDialog(QDialog):
     captured = Signal()
 
     def __init__(self, cfg: ConfigStore, parent=None,
-                 cfg_path: str = "macros.inventory_dump"):
+                 cfg_path: str = "macros.inventory_dump",
+                 title: str = "Inventory"):
         super().__init__(parent)
         self.cfg = cfg
         self.cfg_path = cfg_path
-        title = cfg_path.rsplit(".", 1)[-1].replace("_", " ")
         self.setWindowTitle(f"Calibrate {title} grid")
         self.setModal(True)
         self._captures: dict[str, tuple[int, int]] = {}

@@ -1,16 +1,13 @@
-"""PoE trade query pipeline.
+"""PoE trade query pipeline used by the Map Search tab.
 
-Two pipelines live here side-by-side:
+* :class:`MapDataset` + :func:`build_map_query` turn the visual mod
+  selection (``config/map_mods.yaml``, v2 schema) into a trade payload.
+* :func:`build_url` turns that payload into a pathofexile.com/trade URL.
 
-* ``parse`` + ``build_query`` — the legacy regex-style one, kept for
-  anyone still calling it.
-* ``MapDataset`` + ``build_map_query`` — the new visual selector
-  pipeline used by the Map Search UI tab.
-
-Both feed into :func:`build_url` for the final POST / URL step.
+The older regex-style pipeline (``parse`` / ``build_query`` / ``ModMap``)
+was removed: its v1 data schema no longer exists and nothing used it.
 """
-from .parser import parse, ParsedQuery, Group, Atom  # noqa: F401
-from .builder import build_query, build_url, ModMap    # noqa: F401
+from .builder import build_url  # noqa: F401
 from .map_query import (  # noqa: F401
     MapDataset, ItemType, Category, Mod, Preset, build_map_query,
 )

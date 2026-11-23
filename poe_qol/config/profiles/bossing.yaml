@@ -1,8 +1,7 @@
-# Bossing profile – keep life flask, disable inventory sweep so a
-# mis-press doesn't spam clicks mid-fight.
-macros:
-  life_flask:
-    enabled: true
-    interval_ms: [4200, 4900]
-  inventory_dump:
-    enabled: false
+# Bossing profile. Partial overrides of config/default.yaml.
+# (It used to tune the retired life-flask timer and inventory dump.)
+# Example:
+#   macros:
+#     coord_picker:
+#       enabled: false
+{}

@@ -6,6 +6,7 @@ from pathlib import Path
 
 from PySide6.QtWidgets import QApplication
 
+from . import APP_ID, APP_NAME, __version__
 from .core.config import ConfigStore
 from .core.logger import setup_logging
 from .core.state import AppState
@@ -19,8 +20,8 @@ def run() -> int:
     root = Path(__file__).resolve().parents[2]
     cfg = ConfigStore(root)
     log = setup_logging(root / "logs", cfg.get("app.log_level", "INFO"))
-    log.info("poe_qol starting (input backend will be: %s)",
-             "pydirectinput")
+    log.info("%s %s starting (input backend will be: %s)",
+             APP_NAME, __version__, "pydirectinput")
 
     state = AppState()
     state.set("global_enabled", cfg.get("app.global_enabled", True))
@@ -34,6 +35,9 @@ def run() -> int:
     scheduler.load()
 
     qapp = QApplication(sys.argv)
+    qapp.setApplicationName(APP_ID)
+    qapp.setApplicationDisplayName(APP_NAME)
+    qapp.setApplicationVersion(__version__)
     win = MainWindow(cfg, state, scheduler)
     win.show()
     try:

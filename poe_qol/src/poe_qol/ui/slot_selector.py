@@ -10,7 +10,15 @@ Provides:
     * Live overlay window highlighting the selected slots at real
       screen coordinates (resolved via vision/window.py)
     * Calibrate dialog (cursor + global hotkey)
-    * Dump button – fires the macro programmatically
+
+Highlight-only by design: nothing here sends input to the game. The
+player Ctrl-clicks the highlighted slots themselves. (The old "Dump"
+sweep clicked up to 72 slots per key press, which breaks GGG's
+one-action-per-key-press rule; see docs/COMPLIANCE_REVIEW.md.)
+
+The config namespaces (`macros.inventory_dump`, `macros.map_stash_dump`)
+keep their historical names so existing calibration and selections in
+config/user.yaml keep working.
 """
 from __future__ import annotations
 
@@ -35,14 +43,12 @@ class SlotSelector(QWidget):
     def __init__(self, cfg: ConfigStore,
                  cfg_path: str = "macros.inventory_dump",
                  title: str = "Inventory",
-                 macro=None,
                  on_change: Callable[[], None] | None = None,
                  scheduler=None):
         super().__init__()
         self.cfg = cfg
         self.cfg_path = cfg_path
         self.title = title
-        self.macro = macro
         self.on_change = on_change or (lambda: None)
         self._scheduler = scheduler
         self._buttons: dict[tuple[int, int], QToolButton] = {}
@@ -123,22 +129,11 @@ class SlotSelector(QWidget):
         ov.addWidget(self.calibrate_btn, 1)
         v.addLayout(ov)
 
-        # Dump button
-        dump_row = QHBoxLayout()
-        self.dump_btn = QPushButton(f"Dump  ({self.title})")
-        self.dump_btn.setStyleSheet(
-            "background:#28a;color:white;font-weight:bold;padding:8px;")
-        self.dump_btn.setToolTip(
-            "Bring PoE to the foreground (focus-clicks the first slot a "
-            "couple of times) then Ctrl+Left-click every selected slot.")
-        self.dump_btn.clicked.connect(lambda: self._dump("left"))
-        dump_row.addWidget(self.dump_btn, 3)
-
-        self.dump_right_btn = QPushButton("Dump (Right)")
-        self.dump_right_btn.setToolTip("Same sweep but Ctrl+Right-click.")
-        self.dump_right_btn.clicked.connect(lambda: self._dump("right"))
-        dump_row.addWidget(self.dump_right_btn, 1)
-        v.addLayout(dump_row)
+        hint = QLabel(
+            "Highlight only: turn on the overlay, then Ctrl-click the "
+            "highlighted slots yourself. Nothing is clicked for you.")
+        hint.setWordWrap(True)
+        v.addWidget(hint)
 
         self._summary = QLabel()
         v.addWidget(self._summary)
@@ -200,25 +195,6 @@ class SlotSelector(QWidget):
         total = len(self._buttons)
         self._summary.setText(f"{n} / {total} selected"
                               + ("  (all)" if n == total else ""))
-
-    # ---- dump ----
-    def _dump(self, button: str) -> None:
-        if self.macro is None:
-            QMessageBox.warning(self, "Dump",
-                                "No macro wired up for this tab.")
-            return
-        if not self.macro.enabled:
-            QMessageBox.information(
-                self, "Dump",
-                f"Macro '{self.macro.NAME}' is disabled. Enable it on the "
-                f"Macros tab first.")
-            return
-        if not self.cfg.get("app.global_enabled", True):
-            QMessageBox.information(
-                self, "Dump",
-                "Global enable is off. Toggle it on in the Macros tab.")
-            return
-        self.macro.trigger(button)
 
     # ---- profiles ----
     def _profile_dir(self) -> Path:
@@ -296,7 +272,8 @@ class SlotSelector(QWidget):
         if scheduler:
             scheduler.hotkeys.unbind_all()
         try:
-            dlg = CalibrateDialog(self.cfg, self, cfg_path=self.cfg_path)
+            dlg = CalibrateDialog(self.cfg, self, cfg_path=self.cfg_path,
+                                  title=self.title)
             if dlg.exec():
                 if self._overlay:
                     self._overlay._reposition()

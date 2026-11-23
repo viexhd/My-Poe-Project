@@ -3,11 +3,34 @@ requires = ["setuptools>=68"]
 build-backend = "setuptools.build_meta"
 
 [project]
-name = "poe_qol"
+name = "twice-corrupted"
 version = "0.1.0"
-description = "Modular quality-of-life automation for Path of Exile"
+description = "Twice Corrupted: a quality-of-life companion for Path of Exile"
 requires-python = ">=3.11"
 readme = "README.md"
+# Runtime dependencies. Ranges are bounded to the major versions this
+# project has been tested with; requirements-lock.txt pins the exact
+# versions of a known-good environment.
+dependencies = [
+    "PySide6>=6.6,<7",
+    "PyYAML>=6.0,<7",
+    "keyboard>=0.13.5,<0.14",
+    "pydirectinput-rgx>=2.1,<3",
+]
+
+[project.optional-dependencies]
+# Screen capture + OpenCV template matching (src/poe_qol/vision/).
+# No shipped feature uses them since the dump sweep was retired; kept as
+# an opt-in extra for future on-key-press features.
+vision = [
+    "numpy>=1.26,<3",
+    "opencv-python>=4.9,<5",
+    "mss>=9.0,<11",
+]
+
+# The import package keeps its original name, poe_qol.
+[project.scripts]
+twice-corrupted = "poe_qol.app:run"
 
 [tool.setuptools.packages.find]
 where = ["src"]
