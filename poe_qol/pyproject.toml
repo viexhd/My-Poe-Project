@@ -27,9 +27,6 @@ vision = [
     "opencv-python>=4.9,<5",
     "mss>=9.0,<11",
 ]
-# Scripts under poe_qol.tools (e.g. build_icon) only — not pulled in
-# by the runtime app.
-tools = ["Pillow>=10.0"]
 
 # The import package keeps its original name, poe_qol.
 [project.scripts]

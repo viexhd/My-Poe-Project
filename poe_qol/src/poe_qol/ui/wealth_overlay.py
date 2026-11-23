@@ -17,7 +17,7 @@ try:  # design tokens from the theme (fallbacks keep this importable)
     from .styles import ACCENT, BG_0, FG_1, FG_2, LINE_STRONG
 except Exception:  # pragma: no cover
     BG_0, LINE_STRONG, ACCENT, FG_1, FG_2 = (
-        "#0E1116", "#3A4454", "#E8B057", "#A9B2C3", "#6B7486")
+        "#0D0A0B", "#4A363C", "#D9B25A", "#BEB0A4", "#85776E")
 
 
 def _fmt(v: float, digits: int = 2) -> str:

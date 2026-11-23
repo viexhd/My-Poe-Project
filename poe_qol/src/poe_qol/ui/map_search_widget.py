@@ -101,13 +101,13 @@ class _ModButton(QPushButton):
         # `_tint_rgba` keeps alpha independent of the source hex.
         tint = _tint_rgba(color, 0.28)
         self.setStyleSheet(
-            "QPushButton { padding: 6px 10px; border: 1px solid #2A3240;"
-            " border-radius: 4px; background:#1C222C; color:#E6EAF2;"
+            "QPushButton { padding: 6px 10px; border: 1px solid #33262A;"
+            " border-radius: 4px; background:#1C1518; color:#EFE6DA;"
             " text-align:left; }"
             f"QPushButton:checked {{ background: {tint};"
             f" border: 1px solid {color}; color:#FFFFFF;"
             " font-weight: 600; }}"
-            "QPushButton:hover { border: 1px solid #3A4454; }"
+            "QPushButton:hover { border: 1px solid #4A363C; }"
         )
 
 
@@ -225,8 +225,8 @@ class MapSearchWidget(QWidget):
         self.preview = QLabel("No mods excluded.")
         self.preview.setWordWrap(True)
         self.preview.setStyleSheet(
-            "color:#A9B2C3; padding:8px 10px; background:#151A22;"
-            " border:1px solid #2A3240; border-radius:6px;")
+            "color:#BEB0A4; padding:8px 10px; background:#141012;"
+            " border:1px solid #33262A; border-radius:6px;")
         root.addWidget(self.preview)
 
         # ---- action row ----
@@ -305,7 +305,7 @@ class MapSearchWidget(QWidget):
             # over every mod chip inside the section.
             header = QLabel(cat.name)
             header.setStyleSheet(
-                f"color:#E6EAF2; padding:6px 10px; font-weight:600;"
+                f"color:#EFE6DA; padding:6px 10px; font-weight:600;"
                 f" font-size:14px;"
                 f" border-left: 3px solid {cat.color};"
                 f" background: rgba(255,255,255,0.02);")

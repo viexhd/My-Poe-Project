@@ -11,34 +11,40 @@ from PySide6.QtWidgets import QApplication
 
 
 # ---- Design tokens -------------------------------------------------------
+# "Scarlet rot & gilt": warm obsidian surfaces, bone text, gilt gold for
+# primary actions/focus, crimson rot for brand highlights. Same palette as
+# the icon and banner (tools/build_brand.py, docs/BRAND.md).
+
 # Surface
-BG_0 = "#0E1116"
-BG_1 = "#151A22"
-BG_2 = "#1C222C"
-BG_3 = "#242B37"
+BG_0 = "#0D0A0B"
+BG_1 = "#141012"
+BG_2 = "#1C1518"
+BG_3 = "#261C20"
 
 # Border
-LINE = "#2A3240"
-LINE_STRONG = "#3A4454"
+LINE = "#33262A"
+LINE_STRONG = "#4A363C"
 
 # Text
-FG_0 = "#E6EAF2"
-FG_1 = "#A9B2C3"
-FG_2 = "#6B7486"
+FG_0 = "#EFE6DA"      # bone
+FG_1 = "#BEB0A4"      # ash
+FG_2 = "#85776E"
 
 # Accents
-ACCENT = "#E8B057"
-ACCENT_HI = "#F5C879"
-INFO = "#4FA7E3"
-SUCCESS = "#3FB27A"
-WARN = "#E0A24A"
-DANGER = "#D9544A"
+ACCENT = "#D9B25A"    # gilt: primary buttons, focus, selection
+ACCENT_HI = "#F2DE9F"
+ROT = "#B3122E"       # scarlet rot: brand highlights
+ROT_HI = "#E0482F"
+INFO = "#6FA8DC"
+SUCCESS = "#4FB286"
+WARN = "#E3A64B"
+DANGER = "#E5484D"
 
 # Category tints (used by Map Search section headers)
-CAT_BREAKING = "#B04848"
-CAT_DANGER = "#8E5BB4"
-CAT_ANNOYING = "#C88448"
-CAT_OTHER = "#5B7FB4"
+CAT_BREAKING = "#C0303F"
+CAT_DANGER = "#9A5BB4"
+CAT_ANNOYING = "#D08A4A"
+CAT_OTHER = "#5B86B4"
 
 
 _QSS = f"""
@@ -74,11 +80,11 @@ QTabBar::tab:hover {{
 }}
 QTabBar::tab:selected {{
     color: {FG_0};
-    border-bottom: 2px solid {ACCENT};
+    border-bottom: 2px solid {ROT_HI};
 }}
 
 /* ---- inputs ---- */
-QLineEdit, QSpinBox, QComboBox {{
+QLineEdit, QSpinBox, QDoubleSpinBox, QComboBox {{
     background: {BG_2};
     border: 1px solid {LINE};
     border-radius: 6px;
@@ -87,10 +93,10 @@ QLineEdit, QSpinBox, QComboBox {{
     selection-background-color: {ACCENT};
     selection-color: #1A1200;
 }}
-QLineEdit:focus, QSpinBox:focus, QComboBox:focus {{
+QLineEdit:focus, QSpinBox:focus, QDoubleSpinBox:focus, QComboBox:focus {{
     border: 1px solid {ACCENT};
 }}
-QLineEdit:disabled, QSpinBox:disabled, QComboBox:disabled {{
+QLineEdit:disabled, QSpinBox:disabled, QDoubleSpinBox:disabled, QComboBox:disabled {{
     color: {FG_2};
     background: {BG_1};
 }}
