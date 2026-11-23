@@ -48,13 +48,18 @@ def run() -> int:
     icon = load_app_icon(root)
     if not icon.isNull():
         qapp.setWindowIcon(icon)
-    win = MainWindow(cfg, state, scheduler)
+    # Alt+drag area selection (needs a running QApplication). Its global
+    # mouse hook is only installed when the feature is enabled.
+    from .area_select.controller import AreaSelectController
+    area_select = AreaSelectController(cfg, state, sender)
+    win = MainWindow(cfg, state, scheduler, area_select=area_select)
     if not icon.isNull():
         win.setWindowIcon(icon)
     win.show()
     try:
         return qapp.exec()
     finally:
+        area_select.shutdown()
         scheduler.shutdown()
 
 

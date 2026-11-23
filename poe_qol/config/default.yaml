@@ -90,6 +90,41 @@ macros:
       show:    ctrl+alt+v
     save_to: logs/coords.json
 
+# ---- Alt+drag area selection ----
+# Hold `modifier` and drag across the inventory to select slots
+# (docs/AREA_SELECT.md). Uses the calibration of the grids listed in
+# `grids`. The drag only starts inside (or `start_margin_px` around) a
+# grid while PoE is focused; Alt+clicks anywhere else reach the game.
+area_select:
+  enabled: true
+  modifier: alt                # alt | ctrl+alt | alt+shift  (not ctrl alone)
+  grids: [macros.inventory_dump]   # add macros.map_stash_dump if wanted
+  start_margin_px: 12
+  click_threshold_px: 6        # smaller drags count as a click on one slot
+  order: column_serpentine     # column_serpentine | row_major
+  detect_items: true           # screen-capture empty/occupied detection
+  skip_empty: true             # leave slots detected as empty out
+  occupancy: {std_min: 14, mean_min: 70}
+  manual_clear_after_s: 30     # manual highlights clear after this (0 = never)
+  debug: false
+  overlay:
+    visible: true
+    fill_opacity: 0.18
+    border_px: 2
+  # manual       = highlight only; you Ctrl-click each slot (one action
+  #                per click: within GGG's rules).
+  # experimental = Ctrl-clicks every selected slot for you. Many game
+  #                actions per gesture: NOT GGG-compliant. Runs only after
+  #                the warning in the Area Select tab is accepted
+  #                (`acknowledged`). See docs/COMPLIANCE_REVIEW.md §7.
+  transfer_mode: manual
+  experimental:
+    acknowledged: false
+    click_delay_ms: 60         # minimum 20
+    max_slots: 60
+    modifier_release_timeout_ms: 1500
+    abort_move_px: 25
+
 # ---- Map-search trade link generator ----
 # Drives the "Map Search" tab. Modifier and preset data live in
 # `mod_map_file` (config/map_mods.yaml, v2 schema).

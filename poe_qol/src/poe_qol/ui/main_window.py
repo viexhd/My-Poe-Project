@@ -8,6 +8,8 @@ Tabs:
     * Flipper     – poe.ninja-backed bulk currency flip ranking
     * Pricer      – clipboard-driven trade-site price lookup
     * Wealth      – divine/hour from Wealthy Exile CSV exports + overlay
+    * Area Select – Alt+drag multi-slot selection settings (manual /
+                    experimental transfer)
 
 Tools → Trade Browser opens the in-app pathofexile.com/trade window.
 
@@ -30,6 +32,7 @@ from ..core.config import ConfigStore
 from ..core.state import AppState
 from ..engine.scheduler import Scheduler
 from .map_search_widget import MapSearchWidget
+from .area_select_widget import AreaSelectWidget
 from .slot_selector import SlotSelector
 from .flipper_widget import FlipperWidget
 from .pricer_widget import PricerWidget
@@ -40,9 +43,10 @@ log = logging.getLogger("poe_qol.ui.main_window")
 
 class MainWindow(QMainWindow):
     def __init__(self, cfg: ConfigStore, state: AppState,
-                 scheduler: Scheduler) -> None:
+                 scheduler: Scheduler, area_select=None) -> None:
         super().__init__()
         self.cfg = cfg
+        self.area_select = area_select   # AreaSelectController or None
         self.state = state
         self.scheduler = scheduler
         self._trade_browser = None   # created on first use
@@ -59,6 +63,7 @@ class MainWindow(QMainWindow):
         tabs.addTab(self._build_macros_tab(), "Macros")
         tabs.addTab(self._build_inventory_tab(), "Inventory")
         tabs.addTab(self._build_map_stash_tab(), "Map Stash")
+        tabs.addTab(AreaSelectWidget(cfg, area_select), "Area Select")
         open_in_app = (self.open_trade_browser
                        if cfg.get("trade_browser.enabled", True) else None)
         tabs.addTab(MapSearchWidget(cfg, open_in_app=open_in_app), "Map Search")
@@ -190,6 +195,9 @@ class MainWindow(QMainWindow):
             "A quality-of-life companion for Path of Exile.",
             "It never reads or changes game memory or game files, and "
             "never runs game input on a timer.",
+            "The optional experimental area transfer (off by default) "
+            "Ctrl-clicks several slots per gesture, which GGG's rules do "
+            "not allow.",
             "",
             DISCLAIMER,
         ])

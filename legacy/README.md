@@ -26,4 +26,6 @@ These are the Python ports of the scripts above. They were retired from the app 
 | `inventory_dump.py` | F1/F2: focus clicks, then Ctrl+click up to 60 inventory slots. Also held `GridDumpMacro` and the grid helpers. | Inventory tab slot **highlighter** (overlay only; you click) |
 | `map_stash_dump.py` | F3/F4: the same sweep over a 12×6 map stash tab | Map Stash tab slot **highlighter** |
 
+The Alt+drag **Area Select** feature (`docs/AREA_SELECT.md`) now covers what `inventory_dump.py` did. Its experimental mode Ctrl-clicks the selected slots (also not compliant), and its manual mode replaces the click loop with highlighting. These legacy copies are kept until that experimental mode has been confirmed in-game. After that they can be deleted.
+
 `autoclicker.cpp` used to live in `poe mini project/` at the repo root. Nothing in the build or the app references any of these files. They can be deleted once you no longer need them, and git history keeps them either way.

@@ -1,6 +1,8 @@
 # Compliance Review: Twice Corrupted
 
 > **Status, 2026-11-23:** the §2.1 plan was **approved and implemented** (commit `d5e5be1`, branch `feat/twice-corrupted-compliance`). The life-flask timer and both dump sweeps are retired, the slot tabs are highlight-only, Help → About shows the GGG disclaimer, and `tests/test_compliance.py` guards all of it. Still open: the Map Search trade-API call (honest UA, rate limiting) and the branch's Pricer and Flipper.
+>
+> **Later on 2026-11-23:** the owner allowed opt-in experimental features that break GGG's rules, provided they are isolated and documented honestly. The Alt+drag area selection ships a compliant manual mode and a **non-compliant** experimental bulk Ctrl-click mode. See §7.
 
 > **Not legal advice, no guarantees.** This review applies a *conservative* reading of Grinding Gear Games' (GGG) published rules. GGG does not certify third-party tools, and nothing here guarantees an account will not be actioned. When this document says "compliant" it means "consistent with the conservative reading of the published text", nothing more.
 
@@ -186,3 +188,26 @@ Add a **Transparency** panel listing exactly what the app reads and sends. Model
 | **Trade Browser** (QtWebEngine window) | An ordinary browser the user drives. It loads only `https://*.pathofexile.com` plus Steam's OpenID sign-in page, and sends any other link to the system browser. No script injection, no cookie reads. Cookies stay in its private profile, and "Sign out & clear" wipes them. | ✅ Website use by the player. We do **not** copy APT's approach of reusing the browser's cookies for app-made API calls [V] `main/src/proxy.ts` (`useSessionCookies: true`), because that reuses a Cloudflare clearance to automate requests (§3.4). |
 | **Divine-per-hour overlay** | Display-only, always-on-top window. Data comes only from Wealthy Exile CSV files the user exports. It re-reads a local folder on an interval (minimum 5 min). | ✅ No game input. No screen, clipboard or log reads. No requests to Wealthy Exile. |
 | Live Wealthy Exile feed (logged-in scraping or private endpoints) | — | ❌ Not built. Needs Wealthy Exile's permission (WEALTHY_EXILE_INTEGRATION §2, X1/X2). |
+
+
+---
+
+## 7. Update 2026-11-23: Alt+drag area selection
+
+On 2026-11-23 the owner set a new policy for this personal, local-only project. Features that break GGG's rules may be built, but they must stay isolated, be off by default, be acknowledged explicitly, and never be described as compliant. The engineering is documented in [`AREA_SELECT.md`](AREA_SELECT.md). This section covers only the policy side.
+
+| Part | What it does | Verdict |
+|---|---|---|
+| **Gesture + overlay** (`input/mouse_hook.py`, `area_select/`) | A global low-level mouse/keyboard hook *observes* input. It swallows only the left-button down/up of an Alt+drag that starts on the calibrated grid while PoE is focused, plus Esc during that drag. It draws a click-through overlay. | ✅ No input is sent to the game, and no game memory or files are read. Swallowing our own gesture's clicks is the same class of behaviour as any overlay hotkey. |
+| **Empty-slot detection** (`area_select/occupancy.py`) | One screenshot of the grid per drag, classified by brightness and texture | ✅ Reads only pixels that are already on screen, like other overlays. No memory reads. |
+| **Manual transfer** (`ManualTransfer`, default) | Highlights and numbers the selected slots. The player Ctrl-clicks each one, and the app only *observes* those clicks to tick slots off. | ✅ One player click = one game action. This is the compliant alternative proposed in §2.1 (2). |
+| **Experimental transfer** (`experimental/bulk_ctrl_click.py`) | After one Alt+drag, holds Ctrl and clicks every selected slot (up to `max_slots`, ≥20 ms apart) | ❌ **Not compliant.** One user gesture triggers many game actions, which is the same reason the F1/F2 dump sweep was retired (§2). GGG may treat it as a macro or bot and action the account. |
+
+Safeguards around the experimental transfer. These limit accidents, but they don't make it compliant:
+
+- **Off by default.** `transfer_mode: manual` and `experimental.acknowledged: false` ship in `default.yaml`. Selecting it in the Area Select tab shows a warning that must be accepted, and the tab then shows a permanent red notice. `tests/test_compliance.py` pins these defaults.
+- **Isolated.** The code lives only in `poe_qol/experimental/`. Nothing imports it at module level (enforced by an AST check in `test_compliance.py`), and the controller imports it only when the acknowledged mode is used. The class declares `GGG_COMPLIANT = False`.
+- **Stops on:** F12 or the master switch, Esc, a new gesture, loss of game focus, and real mouse movement by the player. Ctrl is always released. It waits for Alt to be released, so PoE never gets Ctrl+Alt+click.
+- **No disguise.** The delays are fixed (no randomised "human-like" timing), and nothing hides the tool from the game or from GGG.
+
+The README and Help → About now state that the optional experimental transfer breaks the one-action rule. The rest of the app's compliance claims (no timers, no memory reads, one action per key press for every non-experimental feature) still hold.
