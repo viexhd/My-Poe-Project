@@ -162,7 +162,7 @@ trade_browser:
 wealth:
   exports_dir: null          # folder you save Wealthy Exile exports to
   assumed_unit: chaos        # unit of CSV values when the header doesn't say
-  chaos_per_divine: 0        # 0 = unknown (div/h hidden for chaos exports)
+  chaos_per_divine: 0        # 0 = auto: Divine Orb price in the newest export
   interval_minutes: 5        # folder re-check interval; minimum 5
   overlay_visible: false
   overlay_pos: null          # [x, y], written when you drag the overlay
