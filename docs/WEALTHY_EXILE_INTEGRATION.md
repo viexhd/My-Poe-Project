@@ -1,5 +1,7 @@
 # Wealthy Exile Integration: Research and Proposal
 
+> **Superseded (2026-11-24):** the Wealth tab now syncs the stash itself through GGG's official OAuth API (option **X3** below), as Wealthy Exile does, with hourly auto-sync. CSV exports can still be imported into the same history. See [`WEALTH_SYNC.md`](WEALTH_SYNC.md). It needs a GGG-registered client ID before it works.
+
 **Status (2026-11-23): Option B is partly built.** The **Wealth** tab and overlay compute divine-per-hour from the two newest CSV exports in a user-chosen folder (`economy/wealthy_exile_csv.py`, `economy/wealth_rate.py`). There is no SQLite history yet, and the dashboard, stash and history pages are still to come. **CSV layout confirmed from a real export (2026-11-23):**
 - quoted, comma-separated `"Name","Tab","Quantity","Price","Total"`
 - prices are in chaos, and `Total` is more precise than `Quantity × Price`

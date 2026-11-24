@@ -248,8 +248,12 @@ class WealthUiTests(unittest.TestCase):
         self.assertIn("Need 2 Exports", ov.detail_text())
         ov.close()
 
-    def test_wealth_tab_interval_floor_and_refresh(self) -> None:
+    def test_wealth_tab_shows_rate_from_imported_csvs(self) -> None:
+        """Old Wealthy Exile exports imported into the new stash history
+        still give a divine-per-hour reading."""
         from poe_qol.core.config import ConfigStore
+        from poe_qol.economy.stash_sync import csv_to_snapshot
+        from poe_qol.economy.wealth_service import WealthService
         from poe_qol.ui.wealth_widget import WealthWidget
         import shutil
         tmp = Path(tempfile.mkdtemp(prefix="tc_wt_"))
@@ -257,15 +261,19 @@ class WealthUiTests(unittest.TestCase):
                         ignore=shutil.ignore_patterns("user.yaml"))
         exports = tmp / "exports"; exports.mkdir()
         now = time.time()
-        _write(exports, "a.csv", "Name,Quantity,Total\nA,1,1000\n", now - 3600)
-        _write(exports, "b.csv", "Name,Quantity,Total\nA,1,1360\n", now)
+        a = _write(exports, "a.csv", "Name,Quantity,Total\nA,1,1000\n", now - 3660)
+        b = _write(exports, "b.csv", "Name,Quantity,Total\nA,1,1360\n", now - 60)
         cfg = ConfigStore(tmp)
-        cfg.set("wealth.exports_dir", str(exports))
         cfg.set("wealth.chaos_per_divine", 180)
-        w = WealthWidget(cfg)
-        self.assertEqual(w.interval_spin.minimum(), 5)
+        cfg.set("wealth.league", "Mirage")
+        cfg.set("wealth.range", "24h")
+        svc = WealthService(tmp / "data", client_id=None)
+        for p in (a, b):
+            svc.store.add(csv_to_snapshot(p, account="local", league="Mirage"))
+        w = WealthWidget(cfg, service=svc)
         w.refresh()
         self.assertIn("2.00 div/h", w.overlay_headline())
+        w.shutdown()
         w.close()
 
 

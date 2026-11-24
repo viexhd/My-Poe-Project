@@ -10,7 +10,7 @@ from __future__ import annotations
 import re
 
 # Units and short tokens that stay lowercase.
-_KEEP = {"c", "c/h", "div/h", "px", "ms", "x", "vs", "e.g."}
+_KEEP = {"c", "c/h", "div", "div/h", "h", "min", "px", "ms", "x", "vs", "e.g."}
 _WORD = re.compile(r"(\s+)")
 
 

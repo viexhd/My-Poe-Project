@@ -103,6 +103,12 @@ def _endpoints(category: str) -> tuple[str, ...]:
     if category in ("Currency", "Fragment"):      # also had a legacy form
         return (EXCHANGE_URL, LEGACY_URL)
     return (EXCHANGE_URL,)
+# Raw item overviews for stash valuation (economy/pricing.py): the parsed
+# lines above drop fields valuation needs (base type, gem quality,
+# corrupted), so pricing reads the raw lines. Legacy endpoint as fallback.
+ITEM_URL = STASH_URL
+LEGACY_ITEM_URL = "https://poe.ninja/api/data/itemoverview"
+ITEM_ENDPOINTS = (ITEM_URL, LEGACY_ITEM_URL)
 _MAX_CROSS_GAP = 0.25   # bigger cross-pair gaps are treated as noise
 # poe.ninja asks API clients for an identifying User-Agent.
 _UA = (f"TwiceCorrupted/{__version__} "
@@ -386,6 +392,48 @@ class NinjaClient:
             last = NinjaError(f"no prices for league '{league}'")
         assert last is not None
         raise last
+
+
+    # -- item overviews (uniques, maps, gems, ...) --
+    def fetch_item_lines(self, league: str, kind: str, *,
+                         force: bool = False) -> tuple[list[dict], float, bool]:
+        """Raw ``lines`` of an *item* overview (``UniqueArmour``, ``Map``,
+        ``SkillGem`` ...). Same caching rules as :meth:`fetch_currency`.
+        Returns ``(lines, fetched_at, stale)``."""
+        cache = self._cache_path(league, "item-" + kind)
+        if not force and self._fresh(cache):
+            raw = self._read_cache(cache)
+            if raw is not None:
+                return _lines(raw), cache.stat().st_mtime, False
+        q = urllib.parse.urlencode({"league": league, "type": kind})
+        last: Exception | None = None
+        for base in ITEM_ENDPOINTS:
+            url = f"{base}?{q}"
+            log.info("GET %s", url)
+            req = urllib.request.Request(
+                url, headers={"User-Agent": _UA, "Accept": "application/json"})
+            try:
+                with urllib.request.urlopen(req, timeout=self.timeout_sec) as resp:
+                    raw = json.loads(resp.read().decode("utf-8"))
+            except Exception as e:  # noqa: BLE001
+                last = e
+                continue
+            if isinstance(raw, dict) and raw.get("lines"):
+                try:
+                    cache.write_text(json.dumps(raw), encoding="utf-8")
+                except Exception:
+                    log.exception("failed to write ninja cache %s", cache)
+                return _lines(raw), time.time(), False
+            last = NinjaError(f"no {kind} prices for league '{league}'")
+        old = self._read_cache(cache) if cache.exists() else None
+        if old is not None:
+            return _lines(old), cache.stat().st_mtime, True
+        assert last is not None
+        raise NinjaError(_friendly_error(last, league))
+
+
+def _lines(raw: dict) -> list[dict]:
+    return [x for x in raw.get("lines") or [] if isinstance(x, dict)]
 
 
 class NinjaError(RuntimeError):
