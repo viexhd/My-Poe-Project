@@ -33,6 +33,7 @@ from PySide6.QtWidgets import (
 )
 
 from ..core.config import ConfigStore
+from .text import capitalise
 from ..trade import MapDataset, build_map_query, build_url
 
 log = logging.getLogger("poe_qol.ui.map_search")
@@ -64,7 +65,7 @@ _RARITY_OPTIONS: list[tuple[str, str | None]] = [
 _CORRUPTED_OPTIONS: list[tuple[str, str | None]] = [
     ("Any",        None),
     ("Corrupted",  "true"),
-    ("Not corrupted", "false"),
+    ("Not Corrupted", "false"),
 ]
 
 
@@ -150,16 +151,21 @@ class MapSearchWidget(QWidget):
         self.type_box.currentIndexChanged.connect(self._on_type_changed)
         g.addWidget(field("Item", self.type_box), 0, 0, 1, 2)
 
-        self.league_edit = QLineEdit(self.cfg.get(_CFG_LEAGUE, "Standard"))
-        self.league_edit.editingFinished.connect(self._persist_league)
-        g.addWidget(field("League", self.league_edit,
-                          "Exact league name, e.g. <b>Mirage</b>."), 0, 2)
+        from .league import LeagueBox
+        self.league_box = LeagueBox(self.cfg, _CFG_LEAGUE)
+        g.addWidget(field("League", self.league_box,
+                          "<b>Latest</b> always follows the newest "
+                          "challenge league."), 0, 2)
 
         self.status_box = QComboBox()
-        self.status_box.addItems(["online", "onlineleague", "any"])
-        self.status_box.setCurrentText(self.cfg.get(_CFG_STATUS, "online"))
-        self.status_box.currentTextChanged.connect(
-            lambda v: self.cfg.set(_CFG_STATUS, v))
+        for label, value in (("Online", "online"),
+                             ("Online In League", "onlineleague"),
+                             ("Any", "any")):
+            self.status_box.addItem(label, value)
+        self.status_box.setCurrentIndex(max(0, self.status_box.findData(
+            self.cfg.get(_CFG_STATUS, "online"))))
+        self.status_box.currentIndexChanged.connect(
+            lambda _i: self.cfg.set(_CFG_STATUS, self.status_box.currentData()))
         g.addWidget(field("Sellers", self.status_box,
                           "<b>online</b>: sellers online now. "
                           "<b>any</b>: include offline sellers."), 0, 3)
@@ -193,7 +199,7 @@ class MapSearchWidget(QWidget):
         self.min_mods_spin.setSpecialValueText("Off")
         self.min_mods_spin.valueChanged.connect(
             lambda v: self._persist_filter(_CFG_MIN_MODS, int(v)))
-        g.addWidget(field("Min mods", self.min_mods_spin,
+        g.addWidget(field("Min Mods", self.min_mods_spin,
                           "Fewest mods the map must have. <b>8</b> finds "
                           "8-mod corrupted rares. <b>Off</b> = any."), 1, 2)
         for c in range(4):
@@ -210,7 +216,7 @@ class MapSearchWidget(QWidget):
 
         # ---- mods card ----
         self.search_edit = QLineEdit()
-        self.search_edit.setPlaceholderText("Search mods…")
+        self.search_edit.setPlaceholderText("Search Mods…")
         self.search_edit.setClearButtonEnabled(True)
         self.search_edit.setMinimumWidth(150)
         self.search_edit.textChanged.connect(self._apply_search)
@@ -222,7 +228,7 @@ class MapSearchWidget(QWidget):
         right.setSpacing(8)
         right.addWidget(self.search_edit)
         right.addWidget(self.clear_btn)
-        mc, ml = card("Mods to avoid", (
+        mc, ml = card("Mods To Avoid", (
             "Click every mod you <b>don't</b> want. Picked mods turn "
             "coloured and are left out of the search."),
             right=right, icon="search")
@@ -252,7 +258,7 @@ class MapSearchWidget(QWidget):
         bc, bl = card(variant="gilt", padding=16)
         actions = QHBoxLayout()
         actions.setSpacing(10)
-        self.preview = QLabel("No mods excluded")
+        self.preview = QLabel("No Mods Excluded")
         self.preview.setWordWrap(False)
         self.preview.setProperty("role", "muted")
         actions.addWidget(self.preview, 1)
@@ -303,13 +309,13 @@ class MapSearchWidget(QWidget):
         path = Path(self.cfg.get("trade.mod_map_file",
                                  "config/map_mods.yaml"))
         if not path.exists():
-            self.preview.setText(f"[mod data missing: {path}]")
+            self.preview.setText(f"[Mod Data Missing: {path}]")
             return
         try:
             self.dataset = MapDataset.load(path)
         except Exception as e:
             log.exception("failed to load map dataset")
-            self.preview.setText(f"[failed to load mod data: {e}]")
+            self.preview.setText(f"[Failed To Load Mod Data: {e}]")
             return
         self._populate_type_box()
         self._populate_categories()
@@ -359,7 +365,7 @@ class MapSearchWidget(QWidget):
             flow = FlowLayout(grid_host, spacing=8)
 
             for m in self.dataset.mods_in_category(cat.id):
-                btn = _ModButton(m.id, m.name, cat.color)
+                btn = _ModButton(m.id, capitalise(m.name), cat.color)
                 btn.toggled.connect(self._on_mod_toggled)
                 flow.addWidget(btn)
                 self._buttons[m.id] = btn
@@ -440,10 +446,10 @@ class MapSearchWidget(QWidget):
         if not ids:
             QMessageBox.information(
                 self, "Save Preset",
-                "Select at least one mod to exclude before saving.")
+                "Select At Least One Mod To Exclude Before Saving.")
             return
         name, ok = QInputDialog.getText(
-            self, "Save Preset", "Preset name:")
+            self, "Save Preset", "Preset Name:")
         name = (name or "").strip()
         if not ok or not name:
             return
@@ -465,7 +471,7 @@ class MapSearchWidget(QWidget):
         name = presets[idx].get("name", "?")
         if QMessageBox.question(
                 self, "Delete Preset",
-                f"Delete preset '{name}'?") != QMessageBox.StandardButton.Yes:
+                f"Delete Preset '{name}'?") != QMessageBox.StandardButton.Yes:
             return
         del presets[idx]
         self.cfg.set(_CFG_USER_PRESETS, presets)
@@ -548,7 +554,7 @@ class MapSearchWidget(QWidget):
             return
         ids = self._selected_ids()
         if not ids:
-            self.preview.setText("No mods excluded")
+            self.preview.setText("No Mods Excluded")
             self.preview.setToolTip("")
             return
         # Show the nice name, grouped by category.
@@ -565,8 +571,8 @@ class MapSearchWidget(QWidget):
                 parts.append(f"<b>{cat.name}</b>: " + ", ".join(names))
         n = len(ids)
         self.preview.setText(
-            f"<b style='color:#EFE6DA'>{n}</b> mod{'s' if n != 1 else ''} "
-            f"excluded")
+            f"<b style='color:#EFE6DA'>{n}</b> Mod{'s' if n != 1 else ''} "
+            f"Excluded")
         self.preview.setToolTip("<br>".join(parts))
 
     def _restore_selection(self) -> None:
@@ -582,10 +588,6 @@ class MapSearchWidget(QWidget):
 
     def _persist_selection(self) -> None:
         self.cfg.set(_CFG_EXCLUDED, self._selected_ids())
-        self._persist_prefs()
-
-    def _persist_league(self) -> None:
-        self.cfg.set(_CFG_LEAGUE, self.league_edit.text())
         self._persist_prefs()
 
     def _persist_prefs(self) -> None:
@@ -641,7 +643,7 @@ class MapSearchWidget(QWidget):
             self.dataset,
             item_type_id=item_type_id,
             excluded_mod_ids=self._selected_ids(),
-            league=self.cfg.get(_CFG_LEAGUE, "Standard"),
+            league=self.league_box.league(),
             status=self.cfg.get(_CFG_STATUS, "online"),
             rarity=self.rarity_box.currentData(),
             corrupted=self.corrupted_box.currentData(),
@@ -651,7 +653,7 @@ class MapSearchWidget(QWidget):
     def _build_url(self, mode: str) -> str | None:
         q = self._current_query()
         if q is None:
-            QMessageBox.warning(self, "Trade", "Mod data not loaded.")
+            QMessageBox.warning(self, "Trade", "Mod Data Not Loaded.")
             return None
         try:
             return build_url(
@@ -664,7 +666,7 @@ class MapSearchWidget(QWidget):
                     "https://www.pathofexile.com/api/trade/search"),
             )
         except Exception as e:
-            QMessageBox.warning(self, "Trade link failed", str(e))
+            QMessageBox.warning(self, "Trade Link Failed", str(e))
             return None
 
     def _open_trade(self, external: bool = False) -> None:

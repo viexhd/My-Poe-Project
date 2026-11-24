@@ -129,7 +129,9 @@ area_select:
 # Drives the "Map Search" tab. Modifier and preset data live in
 # `mod_map_file` (config/map_mods.yaml, v2 schema).
 trade:
-  league: Mirage
+  # "auto" = always the latest challenge league (looked up on the
+  # trade site); or a fixed name such as "Hardcore Covens".
+  league: auto
   status: online               # online | onlineleague | any
   item_type_id: map_t16        # default dropdown selection (see map_mods.yaml)
   mod_map_file: config/map_mods.yaml
@@ -145,16 +147,18 @@ trade:
   # config/user.yaml so your last selection survives a restart.
   excluded_mods: []
 
-# ---- Currency flipper (poe.ninja-backed) ----
-# Ranks currencies by composite flip-attractiveness (volume × spread ×
-# stability × confidence × liquidity). See economy/flipper.py for the
-# scoring math and src/poe_qol/ui/flipper_widget.py for the UI.
+# ---- Flipper (poe.ninja-backed) ----
+# Ranks every poe.ninja category except unique weapons and armour by
+# composite flip-attractiveness (volume × margin × stability ×
+# confidence × liquidity). See economy/flipper.py for the scoring math
+# and src/poe_qol/ui/flipper_widget.py for the UI.
 flipper:
-  # League defaults to trade.league if unset; the UI lets you override
-  # so you can watch a different league without touching the trade tab.
-  league: null
-  # Drop currencies that trade fewer than this many units a day
-  # (poe.ninja exchange volume / price). 10 is enough signal to matter
+  # "auto" (or null) = always the latest challenge league.
+  league: auto
+  # "all" or one poe.ninja category id (Currency, Scarab, SkillGem…).
+  category: all
+  # Drop items that trade fewer than this many units a day (poe.ninja
+  # exchange volume / price; for gems, maps and uniques: listings). 10 is enough signal to matter
   # without flooding the table with fringe items.
   min_volume: 10
   # poe.ninja flags thin-data entries as low-confidence; skipping them
@@ -172,8 +176,8 @@ flipper:
 # comparable listings whenever the user Ctrl+Cs an item in PoE.
 # Surfaces a "stale floor" insight that the site itself doesn't.
 pricer:
-  # Defaults to trade.league if null, same convention as flipper.
-  league: null
+  # "auto" (or null) = always the latest challenge league.
+  league: auto
   # Trade slug for the currency prices should be denominated in.
   # "chaos" covers 95% of use-cases; switch to "divine" late-league.
   have_currency: chaos

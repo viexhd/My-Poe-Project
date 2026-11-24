@@ -92,7 +92,7 @@ class SlotSelector(QWidget):
             btn.clicked.connect(fn)
             bulk.addWidget(btn)
         grid_card, gv = card(
-            f"{rows} × {cols} slots",
+            f"{rows} × {cols} Slots",
             "Click slots to pick them. Green = highlighted in game.",
             right=bulk, icon="inventory")
 
@@ -121,7 +121,7 @@ class SlotSelector(QWidget):
                 b.setChecked((r, c) in selected)
                 b.setFixedSize(CELL_SIZE_PX, CELL_SIZE_PX)
                 b.setCursor(Qt.CursorShape.PointingHandCursor)
-                b.setToolTip(f"row {r + 1}, column {c + 1}")
+                b.setToolTip(f"Row {r + 1}, Column {c + 1}")
                 b.toggled.connect(lambda _v, rr=r, cc=c: self._on_toggle(rr, cc))
                 self._style_button(b)
                 grid.addWidget(b, r, c)
@@ -145,7 +145,7 @@ class SlotSelector(QWidget):
             "<b>Highlight only</b>: you Ctrl-click them yourself; nothing "
             "is clicked for you. Needs windowed or windowed-fullscreen."),
             icon="eye")
-        self.overlay_btn = QPushButton("Show overlay")
+        self.overlay_btn = QPushButton("Show Overlay")
         self.overlay_btn.setCheckable(True)
         self.overlay_btn.setProperty("size", "big")
         self.overlay_btn.setProperty("role", "primary")
@@ -288,8 +288,8 @@ class SlotSelector(QWidget):
         n = len(self._current_selected())
         total = len(self._buttons)
         self._summary_card.set(f"{n} / {total}",
-                               "all slots" if n == total else
-                               ("none yet" if n == 0 else ""))
+                               "All Slots" if n == total else
+                               ("None Yet" if n == 0 else ""))
 
     # ---- profiles ----
     def _profile_dir(self) -> Path:
@@ -299,7 +299,7 @@ class SlotSelector(QWidget):
     def _refresh_profiles(self) -> None:
         self.prof_combo.blockSignals(True)
         self.prof_combo.clear()
-        self.prof_combo.addItem("(none)")
+        self.prof_combo.addItem("(None)", "")
         d = self._profile_dir()
         if d.exists():
             for p in sorted(d.glob("*.yaml")):
@@ -312,7 +312,7 @@ class SlotSelector(QWidget):
         self.prof_combo.blockSignals(False)
 
     def _on_profile_changed(self, name: str) -> None:
-        if not name or name == "(none)":
+        if not name or name == "(None)":
             self.cfg.set(self._k("active_slot_profile"), None)
             self._persist_selection()
             return
@@ -332,7 +332,7 @@ class SlotSelector(QWidget):
             self._overlay.refresh(sorted(slots))
 
     def _save_profile_prompt(self) -> None:
-        name, ok = QInputDialog.getText(self, "Save slot profile", "Name:")
+        name, ok = QInputDialog.getText(self, "Save Slot Profile", "Name:")
         if not ok or not name.strip():
             return
         name = name.strip()
@@ -349,10 +349,10 @@ class SlotSelector(QWidget):
 
     def _delete_profile(self) -> None:
         name = self.prof_combo.currentText()
-        if name in ("", "(none)"):
+        if name in ("", "(None)"):
             return
-        ok = QMessageBox.question(self, "Delete profile",
-                                  f"Delete slot profile '{name}'?")
+        ok = QMessageBox.question(self, "Delete Profile",
+                                  f"Delete Slot Profile '{name}'?")
         if ok != QMessageBox.StandardButton.Yes:
             return
         p = self._profile_dir() / f"{name}.yaml"
@@ -383,14 +383,14 @@ class SlotSelector(QWidget):
             self._overlay = _OverlayWindow(self.cfg, self.cfg_path)
             self._overlay.refresh(self._current_selected())
             self._overlay.show()
-            self.overlay_btn.setText("Hide overlay")
+            self.overlay_btn.setText("Hide Overlay")
             self.overlay_btn.setProperty("role", "")
             self.overlay_btn.setIcon(_eye(False))
         else:
             if self._overlay:
                 self._overlay.close()
                 self._overlay = None
-            self.overlay_btn.setText("Show overlay")
+            self.overlay_btn.setText("Show Overlay")
             self.overlay_btn.setProperty("role", "primary")
             self.overlay_btn.setIcon(_eye(True))
         from .styles import repolish

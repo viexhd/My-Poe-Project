@@ -240,7 +240,7 @@ class ClientFallbackTests(unittest.TestCase):
         c._http_get = boom
         with self.assertRaises(NinjaError) as cm:
             c.fetch_currency("Mirage")
-        self.assertIn("reach poe.ninja", str(cm.exception))
+        self.assertIn("Reach PoE Ninja", str(cm.exception))
 
 
 
@@ -266,7 +266,9 @@ class FlipperUiTests(unittest.TestCase):
         shutil.copytree(root / "config", tmp / "config",
                         ignore=shutil.ignore_patterns("user.yaml"))
         opened = []
-        w = FlipperWidget(ConfigStore(tmp), tmp, open_in_app=opened.append)
+        cfg = ConfigStore(tmp)
+        cfg.set("flipper.league", "Mirage")
+        w = FlipperWidget(cfg, tmp, open_in_app=opened.append)
         w.refresh = lambda *a, **k: None          # no network
         raw = _exchange([_xline("divine", 1200.0, 2e6),
                          _xline("alch", 9.5, 4e4),
@@ -279,8 +281,8 @@ class FlipperUiTests(unittest.TestCase):
     def test_price_column_sorts_numerically(self):
         from PySide6.QtCore import Qt
         w, _ = self._widget()
-        w.table.sortItems(1, Qt.SortOrder.AscendingOrder)
-        prices = [w.table.item(r, 1).text() for r in range(w.table.rowCount())]
+        w.table.sortItems(2, Qt.SortOrder.AscendingOrder)
+        prices = [w.table.item(r, 2).text() for r in range(w.table.rowCount())]
         self.assertEqual(prices, ["9.50 c", "85.0 c", "1,200 c"])
 
     def test_lowering_min_volume_brings_rows_back(self):
@@ -301,6 +303,128 @@ class FlipperUiTests(unittest.TestCase):
         q = json.loads(urllib.parse.unquote(url.split("?q=", 1)[1]))
         self.assertEqual(q["exchange"]["have"], ["chaos"])
         self.assertIn(q["exchange"]["want"][0], {"divine", "alch", "fusing"})
+
+
+
+def _stash(lines):
+    return {"lines": lines}
+
+
+class ItemOverviewTests(unittest.TestCase):
+    """poe.ninja stash item overview: gems, maps, uniques, beasts…"""
+
+    def test_parses_gem_with_level_quality_and_listings(self):
+        raw = _stash([{"name": "Awakened Multistrike Support",
+                       "baseType": "Awakened Multistrike Support",
+                       "chaosValue": 950.0, "gemLevel": 5, "gemQuality": 20,
+                       "corrupted": False, "listingCount": 37,
+                       "sparkline": {"data": [0, 1, 2], "totalChange": 2.0}}])
+        (line,) = _parse_lines(raw, "SkillGem")
+        self.assertEqual(line.category, "SkillGem")
+        self.assertIn("Level 5", line.name)
+        self.assertIn("20% Quality", line.name)
+        self.assertEqual(line.listings, 37)
+        self.assertEqual(line.daily_volume, 37)
+        self.assertFalse(line.is_bulk)
+        self.assertEqual(line.search_type, "Awakened Multistrike Support")
+        self.assertEqual(line.search_name, "")
+
+    def test_unique_searches_by_name_and_base(self):
+        raw = _stash([{"name": "Headhunter", "baseType": "Leather Belt",
+                       "chaosValue": 9000.0, "count": 12,
+                       "sparkline": {"data": [1], "totalChange": 0}}])
+        (line,) = _parse_lines(raw, "UniqueAccessory")
+        self.assertEqual((line.search_name, line.search_type),
+                         ("Headhunter", "Leather Belt"))
+        self.assertEqual(line.listings, 12)        # falls back to "count"
+
+    def test_few_listings_is_low_confidence(self):
+        raw = _stash([{"name": "Rare Thing", "chaosValue": 50.0,
+                       "listingCount": 2,
+                       "sparkline": {"data": [1, 2], "totalChange": 1}}])
+        (line,) = _parse_lines(raw, "Beast")
+        self.assertTrue(line.low_confidence_receive)
+
+    def test_items_score_within_bounds(self):
+        raw = _stash([
+            {"name": "Map A", "chaosValue": 5.0, "mapTier": 16,
+             "listingCount": 400, "sparkline": {"data": [1], "totalChange": 1}},
+            {"name": "Map B", "chaosValue": 5.0, "mapTier": 16,
+             "listingCount": 12, "sparkline": {"data": [1], "totalChange": 1}},
+        ])
+        ops = score_currency_flips(_parse_lines(raw, "Map"))
+        self.assertEqual([o.line.search_type for o in ops], ["Map A", "Map B"])
+        for o in ops:
+            self.assertTrue(0.0 <= o.score <= 1.0)
+
+
+class FetchAllTests(unittest.TestCase):
+    def test_merges_categories_and_reports_missing(self):
+        import tempfile
+        from pathlib import Path
+        from poe_qol.economy.ninja import (
+            ALL_CATEGORIES, EXCLUDED_CATEGORIES, NinjaClient)
+        self.assertFalse(set(EXCLUDED_CATEGORIES) & set(ALL_CATEGORIES))
+        c = NinjaClient(Path(tempfile.mkdtemp()))
+        answers = {
+            "Currency": _exchange([_xline("divine", 160.0, 1e6)]),
+            "SkillGem": _stash([{"name": "Enlighten Support",
+                                 "chaosValue": 900.0, "gemLevel": 3,
+                                 "listingCount": 20,
+                                 "sparkline": {"data": [1], "totalChange": 0}}]),
+        }
+
+        def fake_get(league, kind):
+            if kind not in answers:
+                raise NinjaError(f"no {kind}")
+            return answers[kind]
+        from poe_qol.economy.ninja import NinjaError
+        c._http_get = fake_get
+        seen = []
+        snap = c.fetch_all("Covens", categories=("Currency", "SkillGem", "Oil"),
+                           progress=lambda n, t: seen.append((n, t)))
+        self.assertEqual(sorted(l.category for l in snap.lines),
+                         ["Currency", "SkillGem"])
+        self.assertEqual(snap.missing, ["Oil"])
+        self.assertEqual(snap.source, "mixed")
+        self.assertEqual(seen[-1], (3, 3))
+
+    def test_all_failing_raises(self):
+        import tempfile
+        from pathlib import Path
+        from poe_qol.economy.ninja import NinjaClient, NinjaError
+        c = NinjaClient(Path(tempfile.mkdtemp()))
+
+        def boom(*_a):
+            raise NinjaError("offline")
+        c._http_get = boom
+        with self.assertRaises(NinjaError):
+            c.fetch_all("Covens", categories=("Currency", "Oil"))
+
+
+class TradeLinkTests(unittest.TestCase):
+    def test_item_link_is_a_filtered_search(self):
+        import json, urllib.parse
+        from poe_qol.ui.flipper_widget import trade_url
+        raw = _stash([{"name": "Awakened Multistrike Support",
+                       "baseType": "Awakened Multistrike Support",
+                       "chaosValue": 950.0, "gemLevel": 5, "gemQuality": 20,
+                       "corrupted": False, "listingCount": 37}])
+        (line,) = _parse_lines(raw, "SkillGem")
+        url = trade_url("Covens", line)
+        self.assertTrue(url.startswith(
+            "https://www.pathofexile.com/trade/search/Covens?q="), url)
+        q = json.loads(urllib.parse.unquote(url.split("?q=", 1)[1]))
+        self.assertEqual(q["query"]["type"], "Awakened Multistrike Support")
+        misc = q["query"]["filters"]["misc_filters"]["filters"]
+        self.assertEqual(misc["gem_level"], {"min": 5})
+        self.assertEqual(misc["quality"], {"min": 20})
+        self.assertEqual(misc["corrupted"], {"option": "false"})
+
+    def test_bulk_link_is_an_exchange(self):
+        from poe_qol.ui.flipper_widget import trade_url
+        (line,) = _parse_lines(_exchange([_xline("divine", 160.0, 1e6)]))
+        self.assertIn("/trade/exchange/Covens?q=", trade_url("Covens", line))
 
 
 if __name__ == "__main__":
