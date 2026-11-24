@@ -48,7 +48,7 @@ class WealthOverlay(QWidget):
         self._detail = QLabel("")
         self._detail.setStyleSheet(
             f"color:{FG_1}; font-size:11px; background:transparent;")
-        self._source = QLabel("Wealthy Exile CSV")
+        self._source = QLabel("Stash sync")
         self._source.setStyleSheet(
             f"color:{FG_2}; font-size:10px; background:transparent;")
         for w in (self._headline, self._detail, self._source):
@@ -67,7 +67,7 @@ class WealthOverlay(QWidget):
         if r.divine_per_hour is not None and r.chaos_per_hour is not None:
             bits.append(f"≈ {_fmt(r.chaos_per_hour, 0)} c/h")
         if r.span_minutes:
-            bits.append(f"{r.snapshots_used} exports, {r.span_minutes:.0f} min apart")
+            bits.append(f"over {r.span_minutes / 60:.1f} h")
         if r.latest_at:
             bits.append(f"latest {r.latest_at:%H:%M}")
         if r.message:

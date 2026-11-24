@@ -211,3 +211,15 @@ Safeguards around the experimental transfer. These limit accidents, but they don
 - **No disguise.** The delays are fixed (no randomised "human-like" timing), and nothing hides the tool from the game or from GGG.
 
 The README and Help → About now state that the optional experimental transfer breaks the one-action rule. The rest of the app's compliance claims (no timers, no memory reads, one action per key press for every non-experimental feature) still hold.
+
+## 8. Update 2026-11-24: account stash sync (Wealth tab)
+
+| Feature | What it does | Assessment |
+|---|---|---|
+| **Stash sync** | OAuth 2.1 authorization code + PKCE as a **public** client. Sign-in runs in the user's **system browser** on pathofexile.com (RFC 8252), with a one-shot loopback redirect on `127.0.0.1`. Scopes are `account:profile`, `account:leagues` and `account:stashes` only. It reads `/stash/<league>` and the chosen tabs. | ✅ GGG's documented API, used with the player's consent. It needs a **registered client ID** (still `null` in `default.yaml`), so nothing runs until GGG approves the app. |
+| Request pacing | Hourly by default (15 min minimum). A manual sync has a 60 s cooldown; a failed sync waits 10 min before retrying. Rate limits are learned from `X-Rate-Limit-*` headers with one request of headroom, and `Retry-After` is honoured. | ✅ Follows GGG's rate-limit guidance. |
+| User-Agent | `OAuth <client_id>/<version> (contact: <email>)` | ✅ GGG's required format once `wealth.oauth.contact` is set. |
+| Token storage | DPAPI-encrypted file in `%APPDATA%\twice-corrupted\`. It is deleted and revoked on Disconnect. No passwords are ever handled. | ✅ |
+| Game interaction | None. It sends no input and reads no game memory, screen or logs. | ✅ |
+
+This replaces the §6 note that stash access was blocked. The CSV import stays as a fallback. See `docs/WEALTH_SYNC.md`.

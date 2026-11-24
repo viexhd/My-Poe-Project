@@ -40,6 +40,8 @@ class Snapshot:
     rows: int             # rows that contributed to `total`
     skipped: int          # rows that could not be parsed
     divine_price: float | None = None   # chaos per divine, from the export
+    # (name, tab, quantity, total) per parsed row, in `unit`
+    items: tuple = ()
 
 
 _SPACES = re.compile(r"[\s   ]+")
@@ -153,6 +155,7 @@ def parse_snapshot(path: str | Path, taken_at: datetime | None = None) -> Snapsh
     total = 0.0
     rows = skipped = 0
     divine_price: float | None = None
+    items: list[tuple[str, str, float, float]] = []
     for row in reader:
         if not any(cell.strip() for cell in row):
             continue
@@ -166,6 +169,8 @@ def parse_snapshot(path: str | Path, taken_at: datetime | None = None) -> Snapsh
         except (ValueError, IndexError, KeyError):
             skipped += 1
             continue
+        items.append((_cell(row, cols.get("name")), _cell(row, cols.get("tab")),
+                      _qty(row, cols), value))
         if (divine_price is None and "name" in cols and cols["name"] < len(row)
                 and row[cols["name"]].strip().lower() == "divine orb"):
             try:
@@ -177,4 +182,16 @@ def parse_snapshot(path: str | Path, taken_at: datetime | None = None) -> Snapsh
     when = (taken_at or _time_from_name(path)
             or datetime.fromtimestamp(path.stat().st_mtime))
     return Snapshot(path=path, taken_at=when, total=total, unit=unit,
-                    rows=rows, skipped=skipped, divine_price=divine_price)
+                    rows=rows, skipped=skipped, divine_price=divine_price,
+                    items=tuple(items))
+
+
+def _cell(row: list[str], idx: int | None) -> str:
+    return row[idx].strip() if idx is not None and idx < len(row) else ""
+
+
+def _qty(row: list[str], cols: dict[str, int]) -> float:
+    try:
+        return parse_number(row[cols["quantity"]])
+    except (ValueError, IndexError, KeyError):
+        return 1.0
