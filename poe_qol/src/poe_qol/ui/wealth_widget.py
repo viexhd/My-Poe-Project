@@ -41,6 +41,8 @@ from ..economy.wealth_history import (
 )
 from ..economy.wealth_service import WealthService
 from ..ggg.api import AuthExpired, Cancelled
+from .league import LeagueBox
+from .text import capitalise
 from .wealth_chart import WealthChart
 from .wealth_overlay import WealthOverlay
 
@@ -130,10 +132,10 @@ class TabPickerDialog(QDialog):
 
     def __init__(self, tabs, selected: set[str] | None, parent=None) -> None:
         super().__init__(parent)
-        self.setWindowTitle("Synced tabs")
+        self.setWindowTitle("Synced Tabs")
         self.resize(420, 520)
         v = QVBoxLayout(self)
-        self.all_cb = QCheckBox("Sync every tab (new tabs included)")
+        self.all_cb = QCheckBox("Sync Every Tab (New Tabs Included)")
         self.all_cb.setChecked(selected is None)
         v.addWidget(self.all_cb)
         self.list = QListWidget()
@@ -198,7 +200,6 @@ class WealthWidget(QWidget):
         if self.cfg.get(_K_VISIBLE, False):
             self.overlay_cb.setChecked(True)
         if self.svc.connected and self.svc.configured:
-            QTimer.singleShot(1500, self._load_leagues)
             QTimer.singleShot(4000, self._tick)
 
     # ================================================================ UI
@@ -214,17 +215,17 @@ class WealthWidget(QWidget):
         v.setContentsMargins(0, 0, 0, 0)
         v.setSpacing(18)
 
-        self.sync_btn = QPushButton("Sync now")
+        self.sync_btn = QPushButton("Sync Now")
         self.sync_btn.setProperty("role", "primary")
         self.sync_btn.setIcon(icon("refresh", "#1A1200"))
         self.sync_btn.setToolTip("Read your stash tabs now and save a snapshot.")
         self.sync_btn.clicked.connect(self._on_sync_clicked)
-        self.connect_btn = QPushButton("Connect account")
+        self.connect_btn = QPushButton("Connect Account")
         self.connect_btn.setIcon(icon("external", S.FG_1))
         self.connect_btn.clicked.connect(self._on_connect_clicked)
 
         # ---- account strip ----
-        ac, al = card("Path of Exile account", (
+        ac, al = card("Path Of Exile Account", (
             "Like Wealthy Exile: <b>Connect account</b> opens pathofexile.com "
             "in your browser. Log in there and press <b>Authorize</b>. The "
             "app is allowed to read your account name, leagues and stash "
@@ -233,17 +234,15 @@ class WealthWidget(QWidget):
             icon="globe")
         row = QHBoxLayout()
         row.setSpacing(14)
-        self.account_label = QLabel("Not connected")
+        self.account_label = QLabel("Not Connected")
         self.account_label.setObjectName("CardTitle")
         row.addWidget(self.account_label, 1)
-        self.league_box = QComboBox()
-        self.league_box.setEditable(True)
+        self.league_box = LeagueBox(self.cfg, _K_LEAGUE)
         self.league_box.setMinimumWidth(180)
-        league = self.cfg.get(_K_LEAGUE) or self.cfg.get("trade.league") or "Standard"
-        self.league_box.addItem(league)
-        self.league_box.setCurrentText(league)
-        self.league_box.currentTextChanged.connect(self._on_league_changed)
-        row.addWidget(field("League", self.league_box))
+        self.league_box.league_changed.connect(self._on_league_changed)
+        row.addWidget(field("League", self.league_box,
+                            "<b>Latest</b> follows the newest challenge "
+                            "league. History is kept per league."))
         self.realm_box = QComboBox()
         for key, label in REALMS:
             self.realm_box.addItem(label, key)
@@ -266,18 +265,18 @@ class WealthWidget(QWidget):
         v.addWidget(ac)
 
         # ---- stat cards ----
-        self.worth_card = StatCard("Net worth", "—", icon="wealth", accent=S.ACCENT,
+        self.worth_card = StatCard("Net Worth", "—", icon="wealth", accent=S.ACCENT,
                                    help="Value of the synced tabs at the newest "
                                         "sync in the range.")
         self.change_card = StatCard("Change", "—", help=(
             "Wealth at the end of the range minus wealth at its start (the "
             "newest sync at or before the start). Both ends use the same "
             "divine price, so a moving divine price isn't counted as profit."))
-        self.rate_card = StatCard("Per hour", "—", hero=True, accent=S.ACCENT, help=(
+        self.rate_card = StatCard("Per Hour", "—", hero=True, accent=S.ACCENT, help=(
             "The change divided by the real time between the two syncs."))
         self.reading_label = self.rate_card.value
         self.detail_label = self.rate_card.sub
-        self.sync_card = StatCard("Last sync", "—", icon="refresh",
+        self.sync_card = StatCard("Last Sync", "—", icon="refresh",
                                   help="When the newest snapshot was taken, "
                                        "and when the next automatic sync runs.")
         v.addWidget(CardRow([self.rate_card, self.change_card, self.worth_card,
@@ -330,11 +329,11 @@ class WealthWidget(QWidget):
         irow = QHBoxLayout()
         irow.setSpacing(8)
         self.search_edit = QLineEdit()
-        self.search_edit.setPlaceholderText("Filter items")
+        self.search_edit.setPlaceholderText("Filter Items")
         self.search_edit.setClearButtonEnabled(True)
         self.search_edit.textChanged.connect(self._fill_table)
         irow.addWidget(self.search_edit)
-        self.changed_cb = QCheckBox("Only changed")
+        self.changed_cb = QCheckBox("Only Changed")
         self.changed_cb.toggled.connect(self._fill_table)
         irow.addWidget(self.changed_cb)
         ic, il = card("Items", "Priced items at the end of the range, with how "
@@ -368,7 +367,7 @@ class WealthWidget(QWidget):
             f"{MANUAL_COOLDOWN_SEC} s cooldown."), icon="refresh")
         grid = QHBoxLayout()
         grid.setSpacing(18)
-        self.auto_cb = Switch("Automatic sync", big=True)
+        self.auto_cb = Switch("Automatic Sync", big=True)
         self.auto_cb.setChecked(bool(self.cfg.get(_K_AUTO, True)))
         self.auto_cb.toggled.connect(self._on_auto_toggled)
         grid.addWidget(self.auto_cb)
@@ -376,9 +375,9 @@ class WealthWidget(QWidget):
         cur = clamp_sync_interval(self.cfg.get(_K_INTERVAL, 60))
         opts = sorted(set(SYNC_INTERVALS) | {cur})
         for m in opts:
-            self.interval_box.addItem(f"every {m} min" if m < 60 else
-                                      f"every {m // 60} h" if m % 60 == 0 else
-                                      f"every {m} min", m)
+            self.interval_box.addItem(f"Every {m} min" if m < 60 else
+                                      f"Every {m // 60} h" if m % 60 == 0 else
+                                      f"Every {m} min", m)
         self.interval_box.setCurrentIndex(self.interval_box.findData(cur))
         self.interval_box.currentIndexChanged.connect(self._on_interval_changed)
         grid.addWidget(field("Interval", self.interval_box), 1)
@@ -388,15 +387,15 @@ class WealthWidget(QWidget):
         self.rate_spin.setSpecialValueText("Auto")
         self.rate_spin.setValue(float(self.cfg.get(_K_RATE, 0) or 0))
         self.rate_spin.valueChanged.connect(self._on_rate_changed)
-        grid.addWidget(field("Chaos per divine", self.rate_spin,
+        grid.addWidget(field("Chaos Per Divine", self.rate_spin,
                              "<b>Auto</b> uses poe.ninja's Divine Orb price "
                              "at the newest sync."), 1)
-        self.tabs_btn = QPushButton("Synced tabs…")
+        self.tabs_btn = QPushButton("Synced Tabs…")
         self.tabs_btn.clicked.connect(self._on_tabs_clicked)
         grid.addWidget(self.tabs_btn)
         sl.addLayout(grid)
         orow = QHBoxLayout()
-        self.overlay_cb = Switch("Show per-hour overlay in game")
+        self.overlay_cb = Switch("Show Per-Hour Overlay In Game")
         self.overlay_cb.toggled.connect(self._on_overlay_toggled)
         orow.addWidget(with_help(self.overlay_cb, (
             "A small always-on-top box over the game with the per-hour "
@@ -407,7 +406,7 @@ class WealthWidget(QWidget):
         imp.setIcon(icon("folder", S.FG_1))
         imp.clicked.connect(self._import_csv)
         orow.addWidget(imp)
-        self.delete_btn = QPushButton("Delete history…")
+        self.delete_btn = QPushButton("Delete History…")
         self.delete_btn.setProperty("role", "danger")
         self.delete_btn.clicked.connect(self._delete_history)
         orow.addWidget(self.delete_btn)
@@ -415,7 +414,7 @@ class WealthWidget(QWidget):
         v.addWidget(sc)
 
         # ---- app registration ----
-        rc, rl = card("GGG app registration", (
+        rc, rl = card("GGG App Registration", (
             "GGG only lets registered apps use account sign-in. The app's "
             "<b>client ID</b> comes with the release; if yours is empty, "
             "register a <i>public</i> client with GGG (see "
@@ -425,10 +424,10 @@ class WealthWidget(QWidget):
             "the client ID here."), icon="info")
         crow = QHBoxLayout()
         self.client_edit = QLineEdit(self.svc.client_id)
-        self.client_edit.setPlaceholderText("client ID from GGG")
+        self.client_edit.setPlaceholderText("Client ID From GGG")
         self.client_edit.editingFinished.connect(self._on_client_edited)
-        crow.addWidget(field("OAuth client ID", self.client_edit), 1)
-        docs = QPushButton("Developer docs")
+        crow.addWidget(field("OAuth Client ID", self.client_edit), 1)
+        docs = QPushButton("Developer Docs")
         docs.setIcon(icon("external", S.FG_1))
         docs.clicked.connect(lambda: webbrowser.open(GGG_DEV_DOCS))
         crow.addWidget(docs, 0, Qt.AlignmentFlag.AlignBottom)
@@ -440,7 +439,7 @@ class WealthWidget(QWidget):
     # =========================================================== helpers
     @property
     def league(self) -> str:
-        return self.league_box.currentText().strip()
+        return self.league_box.league()
 
     @property
     def realm(self) -> str:
@@ -458,7 +457,7 @@ class WealthWidget(QWidget):
 
     def _say(self, text: str, error: bool = False) -> None:
         from . import styles as S
-        self.status_label.setText(text)
+        self.status_label.setText(capitalise(text))
         self.status_label.setStyleSheet(f"color:{S.DANGER};" if error else "")
 
     def _busy(self) -> bool:
@@ -506,27 +505,27 @@ class WealthWidget(QWidget):
     def _update_buttons(self) -> None:
         busy = self._busy()
         syncing = busy and getattr(self._task, "kind", "") == "sync"
-        self.sync_btn.setText("Cancel" if syncing else "Sync now")
+        self.sync_btn.setText("Cancel" if syncing else "Sync Now")
         self.sync_btn.setEnabled(self.svc.connected and (not busy or syncing))
         self.tabs_btn.setEnabled(self.svc.connected and not busy)
         if self._login is not None:
-            self.connect_btn.setText("Cancel sign-in")
+            self.connect_btn.setText("Cancel Sign-In")
             self.connect_btn.setEnabled(True)
         else:
             self.connect_btn.setText("Disconnect" if self.svc.connected
-                                     else "Connect account")
+                                     else "Connect Account")
             self.connect_btn.setEnabled(not busy and (self.svc.connected
                                                       or self.svc.configured))
 
     def _update_account(self) -> None:
         if not self.svc.configured:
-            self.account_label.setText("Not connected")
+            self.account_label.setText("Not Connected")
             self._say("This build has no GGG client ID yet: see "
                       "“GGG app registration” below.", error=True)
         elif self.svc.connected:
-            self.account_label.setText(f"Connected as {self.svc.account or 'your account'}")
+            self.account_label.setText(f"Connected As {self.svc.account or 'Your Account'}")
         else:
-            self.account_label.setText("Not connected")
+            self.account_label.setText("Not Connected")
             self._say("Press Connect account and authorize on pathofexile.com.")
         self._update_buttons()
 
@@ -568,38 +567,12 @@ class WealthWidget(QWidget):
         self._update_account()
         self._say("Connected. Syncing your stash…")
         self.refresh()
-        QTimer.singleShot(0, self._load_leagues_then_sync)
+        QTimer.singleShot(0, lambda: self.sync_now(manual=False))
 
     def _on_login_failed(self, e: Exception) -> None:
         self._login = None
         self._update_account()
         self._say(str(e), error=True)
-
-    def _load_leagues(self, then: Callable | None = None) -> None:
-        realm = self.realm
-
-        def done(leagues):
-            cur = self.league
-            self.league_box.blockSignals(True)
-            self.league_box.clear()
-            for lg in leagues:
-                self.league_box.addItem(lg)
-            if cur and self.league_box.findText(cur) < 0:
-                self.league_box.addItem(cur)
-            self.league_box.setCurrentText(cur)
-            self.league_box.blockSignals(False)
-            if then:
-                QTimer.singleShot(0, then)
-
-        def failed(e):
-            self._on_task_failed(e)
-            if then and not isinstance(e, AuthExpired):
-                QTimer.singleShot(0, then)
-
-        self._run(lambda _p, _c: self.svc.leagues(realm), done, failed, progress=False)
-
-    def _load_leagues_then_sync(self) -> None:
-        self._load_leagues(then=lambda: self.sync_now(manual=False))
 
     # ============================================================== sync
     def _on_sync_clicked(self) -> None:
@@ -714,6 +687,13 @@ class WealthWidget(QWidget):
         return f"{d:,.2f} div" if d is not None else f"{chaos:,.0f} c"
 
     def _show_cards(self, r: RangeResult) -> None:
+        self._show_cards_raw(r)
+        for c in (self.worth_card, self.change_card, self.sync_card):
+            c.sub.setText(capitalise(c.sub.text()))
+        self.detail_label.setText(capitalise(self.detail_label.text()))
+        self.range_label.setText(capitalise(self.range_label.text()))
+
+    def _show_cards_raw(self, r: RangeResult) -> None:
         from . import styles as S
         end = r.end
         if end:
@@ -754,9 +734,9 @@ class WealthWidget(QWidget):
                 sub += " · automatic sync off"
             if latest.source == "csv":
                 sub += " · CSV import"
-            self.sync_card.set(_ago(latest.taken_at), sub)
+            self.sync_card.set(capitalise(_ago(latest.taken_at)), sub)
         else:
-            self.sync_card.set("never", "Connect and press Sync now."
+            self.sync_card.set("Never", "Connect and press Sync now."
                                if not self.svc.connected else "Press Sync now.")
         if r.start and r.end:
             self.range_label.setText(
@@ -829,22 +809,18 @@ class WealthWidget(QWidget):
             note += f" · {end.unpriced_count} unpriced items not counted"
         if end.note:
             note += f" · {end.note}"
-        self.items_note.setText(note)
+        self.items_note.setText(capitalise(note))
 
     def overlay_headline(self) -> str:
         return self.overlay.headline_text()
 
     # ========================================================== settings
-    def _on_league_changed(self, text: str) -> None:
-        self.cfg.set(_K_LEAGUE, text.strip() or None)
-        self._persist(_K_LEAGUE)
-        self.refresh()
+    def _on_league_changed(self, _league: str) -> None:
+        self.refresh()          # LeagueBox saves the choice itself
 
     def _on_realm_changed(self, *_a) -> None:
         self.cfg.set(_K_REALM, self.realm)
         self._persist(_K_REALM)
-        if self.svc.connected:
-            self._load_leagues()
 
     def _sync_custom_visible(self) -> None:
         custom = self.range_box.currentData() == "custom"
@@ -927,7 +903,7 @@ class WealthWidget(QWidget):
 
     def _delete_history(self) -> None:
         if QMessageBox.question(
-                self, "Delete history",
+                self, "Delete History",
                 f"Delete every saved snapshot for {self.account} in "
                 f"{self.league}? This can't be undone.") != QMessageBox.StandardButton.Yes:
             return

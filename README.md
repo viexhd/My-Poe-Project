@@ -31,6 +31,8 @@ A desktop quality-of-life companion for **Path of Exile**, built with Python and
 
 ## Features
 
+Every **League** picker defaults to **Latest**, which follows the newest challenge league automatically (looked up on the trade site), so nothing needs changing when a league starts.
+
 The window is a dashboard: a sidebar on the left (**Ctrl+1 … Ctrl+8** jump between pages) and pages made of large cards with big numbers and short labels. Every control has a small **?** beside it: hover or click it for an explanation.
 
 | Page | What it does | Game input |
@@ -42,7 +44,7 @@ The window is a dashboard: a sidebar on the left (**Ctrl+1 … Ctrl+8** jump bet
 | **Map Search** | Pick map mods to exclude, set rarity, corrupted, tier and a minimum "# Modifiers", and save your own presets. **Open Trade** opens the pre-filled search (`/trade/search/<league>?q=…`) in the Trade Browser; **Open in my browser** uses your normal browser instead. | None. By default no API call is made; the trade site runs the search when the page opens. |
 | **Trade Browser** (sidebar) | A browser window showing the real pathofexile.com/trade. Log in there yourself (email or Steam sign-in). Only `pathofexile.com` pages load inside it, and other links open in your normal browser. **Sign out & clear** wipes its cookies. The app never reads them. | None |
 | **Wealth** | Works like Wealthy Exile: **Connect account** signs in on pathofexile.com (GGG's official OAuth), then the app **syncs your stash tabs every hour** (or on demand), prices them with poe.ninja and keeps a local history. Pick any **time range** for the wealth change, div/h, a Total/Hourly chart and per-item gains and losses. Old Wealthy Exile CSV exports can be imported. Optional **always-on-top overlay**. | None. Reads your stash through GGG's API with your permission; prices from poe.ninja. |
-| **Flipper** | Ranks currencies to bulk-flip using poe.ninja's live exchange prices: top pick, best margin, a score bar per currency. Double-click a row to open its bulk exchange on the trade site. Falls back to the last saved prices when poe.ninja can't be reached. | None |
+| **Flipper** | Ranks everything poe.ninja prices (currency, fragments, scarabs, essences, divination cards, gems, maps, uniques and more; not unique weapons or armour) by how good a flip it is: top pick, best margin, a score bar per item, and a category filter. Double-click a row to open it on the trade site (bulk exchange, or a filtered search for gems, maps and uniques). Falls back to the last saved prices when poe.ninja can't be reached. | None |
 | **Pricer** | Prices a copied item using the trade site | None. ⚠️ It calls the trade site's search API; see the compliance doc. |
 | **Coordinate picker** | Ctrl+Alt+C saves the cursor position, Ctrl+Alt+V lists the saved positions | None |
 | **About** (sidebar) | Version and the GGG disclaimer | — |

@@ -245,7 +245,7 @@ class WealthUiTests(unittest.TestCase):
         self.assertIn("2.00 div/h", ov.headline_text())
         ov.show_reading(RateReading(message="Need 2 exports"))
         self.assertIn("—", ov.headline_text())
-        self.assertIn("Need 2 exports", ov.detail_text())
+        self.assertIn("Need 2 Exports", ov.detail_text())
         ov.close()
 
     def test_wealth_tab_shows_rate_from_imported_csvs(self) -> None:

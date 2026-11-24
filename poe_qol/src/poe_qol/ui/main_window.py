@@ -44,6 +44,7 @@ from .components import (
 )
 from .flipper_widget import FlipperWidget
 from .icons import icon
+from .text import capitalise
 from .map_search_widget import MapSearchWidget
 from .pricer_widget import PricerWidget
 from .slot_selector import SlotSelector
@@ -62,13 +63,13 @@ _MACRO_HELP = {
 
 # One short line per page for the Home tiles (index = page index).
 _TILE_LINES = {
-    1: "Highlight slots to stash",
-    2: "Highlight map slots",
-    3: "Alt + drag to select",
-    4: "Find maps without bad mods",
-    5: "Best currencies to flip",
-    6: "Ctrl+C an item to price it",
-    7: "Divines per hour",
+    1: "Highlight Slots To Stash",
+    2: "Highlight Map Slots",
+    3: "Alt + Drag To Select",
+    4: "Find Maps Without Bad Mods",
+    5: "Best Items To Flip",
+    6: "Ctrl+C An Item To Price It",
+    7: "Divines Per Hour",
 }
 
 # (title, icon, help) for every page, in sidebar order.
@@ -180,6 +181,11 @@ class MainWindow(QMainWindow):
         for i in range(len(_PAGES)):
             sc = QShortcut(QKeySequence(f"Ctrl+{i + 1}"), self)
             sc.activated.connect(lambda i=i: self._nav_select(i))
+
+        # Find the newest league in the background; league pickers on
+        # "Latest" update themselves when it arrives.
+        from .league import league_service
+        league_service().start()
 
         self._timer = QTimer(self)
         self._timer.timeout.connect(self._refresh_status)
@@ -302,7 +308,7 @@ class MainWindow(QMainWindow):
         top.addWidget(mc, 0, 0)
 
         # Emergency stop
-        ec = StatCard("Emergency stop", "", variant="danger", help=(
+        ec = StatCard("Emergency Stop", "", variant="danger", help=(
             "Stops everything at once. <b>F12</b> works from anywhere, "
             "even in game. Lights up red while stopped."), icon="stop",
             accent=S.DANGER)
@@ -335,7 +341,7 @@ class MainWindow(QMainWindow):
         grid.setVerticalSpacing(12)
         row = 0
         for name, macro in self.scheduler.macros.items():
-            cb = Switch(name.replace("_", " ").capitalize())
+            cb = Switch(name.replace("_", " ").title())
             cb.setChecked(macro.enabled)
             cb.stateChanged.connect(
                 lambda s, n=name:
@@ -349,7 +355,7 @@ class MainWindow(QMainWindow):
             # One line-edit per action in HOTKEYS so macros with
             # several bindings are fully editable from the UI.
             for action, path in macro.HOTKEYS.items():
-                lab = QLabel(action)
+                lab = QLabel(action.replace("_", " ").title())
                 lab.setObjectName("FieldLabel")
                 grid.addWidget(lab, row, col, Qt.AlignmentFlag.AlignRight)
                 le = QLineEdit(self.cfg.get(path, "") or "")
@@ -363,7 +369,7 @@ class MainWindow(QMainWindow):
         grid.setColumnStretch(99, 1)
         body.addLayout(grid)
         if not self.scheduler.macros:
-            body.addWidget(caption("No hotkey actions loaded."))
+            body.addWidget(caption("No Hotkey Actions Loaded"))
 
         # Surface any hotkey collision the router detected at
         # bind-time so the user sees it instead of only learning
@@ -417,7 +423,8 @@ class MainWindow(QMainWindow):
     def open_trade_browser(self, url: str | None = None) -> None:
         """Show the in-app trade browser, optionally at ``url``."""
         from .trade_browser import HOME_URL, create_trade_browser
-        league = self.cfg.get("trade.league", "Standard")
+        from .league import current_league
+        league = current_league(self.cfg, "trade.league")
         try:
             if self._trade_browser is None:
                 self._trade_browser = create_trade_browser(league)
@@ -427,8 +434,8 @@ class MainWindow(QMainWindow):
             log.exception("trade browser unavailable")
             QMessageBox.warning(
                 self, "Trade Browser",
-                f"The in-app browser could not start ({e}). Opening your "
-                "normal browser instead.")
+                f"The In-App Browser Could Not Start ({e}). Opening Your "
+                "Normal Browser Instead.")
             import webbrowser
             webbrowser.open(url or HOME_URL.format(league=league))
 
@@ -478,8 +485,8 @@ class MainWindow(QMainWindow):
 
         # Surface any hotkey conflict reported by the router.
         conflict = getattr(self.scheduler.hotkeys, "last_conflict", None)
-        if conflict and self.conflict_label.text() != conflict:
-            self.conflict_label.setText(conflict)
+        if conflict and self.conflict_label.text() != capitalise(conflict):
+            self.conflict_label.setText(capitalise(conflict))
         elif not conflict and self.conflict_label.text():
             self.conflict_label.setText("")
 
@@ -488,8 +495,8 @@ class MainWindow(QMainWindow):
             self.estop.setProperty("armed", tripped)
             S.repolish(self.estop)
         if tripped:
-            self._set_chip("● Stopped  ·  switch Macros on", "stopped")
-            self.active_card.set("0", "Stopped by F12", color=S.DANGER)
+            self._set_chip("● Stopped  ·  Switch Macros On", "stopped")
+            self.active_card.set("0", "Stopped By F12", color=S.DANGER)
             return
 
         # Progress-aware active list. Macros expose `progress` as
@@ -499,6 +506,7 @@ class MainWindow(QMainWindow):
         for n, m in self.scheduler.macros.items():
             if not m.running:
                 continue
+            n = n.replace("_", " ").title()
             prog = getattr(m, "progress", None)
             if prog:
                 parts.append(f"{n} {prog[0]}/{prog[1]}")
@@ -510,4 +518,4 @@ class MainWindow(QMainWindow):
         elif want:
             self._set_chip("● Live", "live")
         else:
-            self._set_chip("○ Macros off", "")
+            self._set_chip("○ Macros Off", "")

@@ -27,7 +27,7 @@ EXCHANGE_TYPES = (
     "Currency", "Fragment", "Scarab", "Essence", "DivinationCard", "Fossil",
     "Resonator", "Oil", "Incubator", "DeliriumOrb", "Omen", "Tattoo",
     "Artifact", "AllflameEmber", "Runegraft", "KalguuranRune", "Astrolabe",
-    "Memory",
+    "Memory", "Vial",
 )
 ITEM_TYPES = (
     "UniqueWeapon", "UniqueArmour", "UniqueAccessory", "UniqueFlask",

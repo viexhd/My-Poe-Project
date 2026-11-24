@@ -12,6 +12,7 @@ from PySide6.QtGui import QAction, QColor, QPainter, QPen
 from PySide6.QtWidgets import QLabel, QMenu, QVBoxLayout, QWidget
 
 from ..economy.wealth_rate import RateReading
+from .text import capitalise
 
 try:  # design tokens from the theme (fallbacks keep this importable)
     from .styles import ACCENT, BG_0, FG_1, FG_2, LINE_STRONG
@@ -35,7 +36,7 @@ class WealthOverlay(QWidget):
                          | Qt.WindowType.Tool)
         self.setAttribute(Qt.WidgetAttribute.WA_TranslucentBackground)
         self.setAttribute(Qt.WidgetAttribute.WA_ShowWithoutActivating)
-        self.setWindowTitle("Divine per hour")
+        self.setWindowTitle("Divine Per Hour")
         self._drag_from: QPoint | None = None
 
         lay = QVBoxLayout(self)
@@ -52,7 +53,7 @@ class WealthOverlay(QWidget):
             f"color:{FG_2}; font-size:10px; background:transparent;")
         for w in (self._headline, self._detail, self._source):
             lay.addWidget(w)
-        self.setToolTip("Drag to move · right-click for options")
+        self.setToolTip("Drag To Move · Right-Click For Options")
 
     # ---- content ----
     def show_reading(self, r: RateReading) -> None:
@@ -71,7 +72,7 @@ class WealthOverlay(QWidget):
             bits.append(f"latest {r.latest_at:%H:%M}")
         if r.message:
             bits.append(r.message)
-        self._detail.setText(" · ".join(bits))
+        self._detail.setText(capitalise(" · ".join(bits)))
         if r.source:
             self._source.setText(r.source)
         self.adjustSize()
@@ -108,9 +109,9 @@ class WealthOverlay(QWidget):
 
     def contextMenuEvent(self, e) -> None:  # noqa: N802
         menu = QMenu(self)
-        refresh = QAction("Refresh now", menu)
+        refresh = QAction("Refresh Now", menu)
         refresh.triggered.connect(self.refresh_requested.emit)
-        hide = QAction("Hide overlay", menu)
+        hide = QAction("Hide Overlay", menu)
         hide.triggered.connect(self.hide_requested.emit)
         menu.addAction(refresh)
         menu.addAction(hide)

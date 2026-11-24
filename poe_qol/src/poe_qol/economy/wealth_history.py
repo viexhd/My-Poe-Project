@@ -22,17 +22,17 @@ from .wealth_rate import RateReading
 from .wealth_store import ItemLine, SnapshotHead, WealthStore
 
 RANGE_PRESETS: tuple[tuple[str, str, float | None], ...] = (
-    ("1h", "Last hour", 1),
-    ("3h", "Last 3 hours", 3),
-    ("6h", "Last 6 hours", 6),
-    ("12h", "Last 12 hours", 12),
-    ("24h", "Last 24 hours", 24),
-    ("3d", "Last 3 days", 72),
-    ("7d", "Last 7 days", 168),
-    ("14d", "Last 14 days", 336),
-    ("30d", "Last 30 days", 720),
-    ("all", "All history", None),
-    ("custom", "Custom range…", None),
+    ("1h", "Last Hour", 1),
+    ("3h", "Last 3 Hours", 3),
+    ("6h", "Last 6 Hours", 6),
+    ("12h", "Last 12 Hours", 12),
+    ("24h", "Last 24 Hours", 24),
+    ("3d", "Last 3 Days", 72),
+    ("7d", "Last 7 Days", 168),
+    ("14d", "Last 14 Days", 336),
+    ("30d", "Last 30 Days", 720),
+    ("all", "All History", None),
+    ("custom", "Custom Range…", None),
 )
 
 

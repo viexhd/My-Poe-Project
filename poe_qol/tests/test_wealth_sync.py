@@ -552,7 +552,7 @@ class WealthTabTests(unittest.TestCase):
     def test_disconnected_state(self) -> None:
         w, svc = self._widget(connected=False)
         try:
-            self.assertEqual(w.connect_btn.text(), "Connect account")
+            self.assertEqual(w.connect_btn.text(), "Connect Account")
             self.assertFalse(w.sync_btn.isEnabled())
             self.assertFalse(w.sync_now())
         finally:
@@ -571,7 +571,7 @@ class WealthTabTests(unittest.TestCase):
             # would also fire other test windows' timers (Flipper fetch)
             QCoreApplication.sendPostedEvents(None, QEvent.Type.MetaCall)
             self.assertEqual(len(svc.store.snapshots(svc.account, "Mirage")), before + 1)
-            self.assertIn("Synced 3 tabs", w.status_label.text())
+            self.assertIn("Synced 3 Tabs", w.status_label.text())
             # manual cooldown
             self.assertFalse(w.sync_now(manual=True))
         finally:

@@ -42,7 +42,7 @@ class AreaSelectOverlay(QWidget):
         self.setAttribute(Qt.WidgetAttribute.WA_TranslucentBackground)
         self.setAttribute(Qt.WidgetAttribute.WA_TransparentForMouseEvents, True)
         self.setAttribute(Qt.WidgetAttribute.WA_ShowWithoutActivating)
-        self.setWindowTitle("Area select overlay")
+        self.setWindowTitle("Area Select Overlay")
         self._settings = settings
         self._model: OverlayModel = EMPTY
         self._frame = Rect(0, 0, 1, 1)
