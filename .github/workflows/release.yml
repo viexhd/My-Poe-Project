@@ -106,7 +106,9 @@ jobs:
         run: |
           $exe = "dist\TwiceCorrupted\TwiceCorrupted.exe"
           $p = Start-Process -FilePath $exe -ArgumentList "--smoke-test" -Wait -PassThru
-          Get-Content dist\TwiceCorrupted\logs\poe_qol.log -Tail 25 -ErrorAction SilentlyContinue
+          Get-Content dist\TwiceCorrupted\logs\poe_qol.log -ErrorAction SilentlyContinue |
+            Select-String -Pattern "smoke|leagues|league list|WARNING|ERROR" |
+            ForEach-Object { $_.Line }
           if (Test-Path dist\TwiceCorrupted\logs\crash.log) { Get-Content dist\TwiceCorrupted\logs\crash.log }
           if ($p.ExitCode -ne 0) { throw "Smoke test failed with exit code $($p.ExitCode)" }
           $setup = "dist\release\TwiceCorrupted-Setup-${{ needs.plan.outputs.version }}.exe"

@@ -15,6 +15,7 @@ from . import APP_ID, APP_NAME, __version__
 from .paths import app_root
 
 SMOKE_TEST_MS = 4000
+SMOKE_LIVE_WAIT_MS = 45000
 
 
 def _is_admin() -> bool:
@@ -65,7 +66,39 @@ def _smoke_test(qapp, win, log) -> None:
         log.info("smoke test %s: %d pages, web engine %s",
                  "OK" if ok else "FAILED", pages,
                  "loaded" if result["web"] else "did not load")
-        qapp.exit(0 if ok else 2)
+        result["ok"] = ok
+        _wait_for_live_data()
+
+    # Diagnostics only (they never fail the test, since they need the
+    # network): once the league lookup and the Flipper's first fetch have
+    # finished, log what they got, so a release build shows whether the
+    # live trade site and poe.ninja answered as expected.
+    deadline = {"left": SMOKE_LIVE_WAIT_MS // 500}
+
+    def _wait_for_live_data() -> None:
+        from .ui.flipper_widget import FlipperWidget
+        from .ui.league import league_service
+        svc = league_service()
+        fw = win.findChild(FlipperWidget)
+        flipper_busy = fw is not None and (
+            fw._busy() or (fw._snapshot is None
+                           and not fw.status.text().startswith("⚠")))
+        deadline["left"] -= 1
+        if (svc._busy or flipper_busy) and deadline["left"] > 0:
+            QTimer.singleShot(500, _wait_for_live_data)
+            return
+        log.info("smoke live: leagues=%s latest=%s", svc.leagues[:6], svc.latest)
+        if fw is not None:
+            snap = fw._snapshot
+            if snap is not None:
+                from collections import Counter
+                counts = Counter(l.category for l in snap.lines)
+                log.info("smoke live: flipper league=%s items=%d stale=%s",
+                         snap.league, len(snap.lines), snap.stale)
+                log.info("smoke live: flipper categories=%s", dict(counts))
+                log.info("smoke live: flipper missing=%s", snap.missing)
+            log.info("smoke live: flipper status=%r", fw.status.text())
+        qapp.exit(0 if result.get("ok") else 2)
     QTimer.singleShot(SMOKE_TEST_MS, _done)
 
 
