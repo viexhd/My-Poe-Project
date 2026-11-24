@@ -276,6 +276,7 @@ class FlipperUiTests(unittest.TestCase):
         w._on_fetch_done(CurrencySnapshot("Mirage", time.time(),
                                           list(_parse_lines(raw))))
         self.addCleanup(w.close)
+        self.addCleanup(w.shutdown)
         return w, opened
 
     def test_price_column_sorts_numerically(self):
@@ -303,6 +304,40 @@ class FlipperUiTests(unittest.TestCase):
         q = json.loads(urllib.parse.unquote(url.split("?q=", 1)[1]))
         self.assertEqual(q["exchange"]["have"], ["chaos"])
         self.assertIn(q["exchange"]["want"][0], {"divine", "alch", "fusing"})
+
+    def test_shutdown_abandons_a_hung_fetch(self):
+        import threading, time
+        w, _ = self._widget()
+        del w.refresh                             # use the real one
+        release = threading.Event()
+        self.addCleanup(release.set)              # let the daemon finish
+
+        class _Hung:                              # offline: blocks on I/O
+            def fetch_all(self, league, **_kw):
+                release.wait(30)
+                raise OSError("timed out")
+        w._client = _Hung()
+        w.refresh(force=True)
+        worker = w._worker
+        self.assertTrue(worker.isRunning())
+
+        t0 = time.monotonic()
+        w.shutdown()
+        self.assertLess(time.monotonic() - t0, 1.0)
+        self.assertTrue(worker.isFinished())
+        self.assertIsNone(w._worker)
+
+    def test_shutdown_stops_timers_and_blocks_refresh(self):
+        w, _ = self._widget()
+        del w.refresh
+        w.auto_box.setCurrentIndex(w.auto_box.findData(5))
+        self.assertTrue(w._auto_timer.isActive())
+        w.shutdown()
+        for t in (w._initial_timer, w._auto_timer, w._age_timer):
+            self.assertFalse(t.isActive())
+        w.refresh(force=True)
+        self.assertIsNone(w._worker)
+        w.shutdown()                              # idempotent
 
 
 
@@ -400,6 +435,30 @@ class FetchAllTests(unittest.TestCase):
         c._http_get = boom
         with self.assertRaises(NinjaError):
             c.fetch_all("Covens", categories=("Currency", "Oil"))
+
+    def test_cancel_drops_queued_categories(self):
+        import tempfile, threading, time
+        from pathlib import Path
+        from poe_qol.economy.ninja import FetchCancelled, NinjaClient
+        c = NinjaClient(Path(tempfile.mkdtemp()))
+        release, started = threading.Event(), []
+        self.addCleanup(release.set)
+
+        def hung(league, kind):                   # offline: blocks on I/O
+            started.append(kind)
+            release.wait(30)
+            raise OSError("timed out")
+        c._http_get = hung
+        cancel = threading.Event()
+        threading.Timer(0.2, cancel.set).start()
+        t0 = time.monotonic()
+        with self.assertRaises(FetchCancelled):
+            c.fetch_all("Covens", categories=tuple(f"C{i}" for i in range(8)),
+                        workers=2, cancel=cancel)
+        self.assertLess(time.monotonic() - t0, 2.0)
+        release.set()
+        time.sleep(0.2)
+        self.assertEqual(len(started), 2)         # queued ones never ran
 
 
 class TradeLinkTests(unittest.TestCase):

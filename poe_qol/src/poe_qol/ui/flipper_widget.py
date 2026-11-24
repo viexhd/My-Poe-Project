@@ -18,6 +18,7 @@ from __future__ import annotations
 
 import json
 import logging
+import threading
 import time
 import urllib.parse
 import webbrowser
@@ -54,6 +55,10 @@ _CFG_AUTO_REFRESH_MIN = "flipper.auto_refresh_minutes"
 TRADE_EXCHANGE = "https://www.pathofexile.com/trade/exchange/"
 TRADE_SEARCH = "https://www.pathofexile.com/trade/search/"
 ALL = "all"
+
+# Workers that outlived FlipperWidget.shutdown()'s wait; held so Qt
+# doesn't destroy a running QThread (which aborts the process).
+_ORPHANS: set = set()
 
 # (header, attribute, header tooltip)
 _COLUMNS = [
@@ -117,10 +122,20 @@ def trade_url(league: str, line: CurrencyLine) -> str:
 
 
 class _FetchWorker(QThread):
-    """Off-thread fetch so the UI doesn't freeze while poe.ninja replies."""
+    """Off-thread fetch so the UI doesn't freeze while poe.ninja replies.
+
+    The blocking HTTP call runs on a daemon Python thread; this QThread
+    only waits for it and honours ``requestInterruption()``. A socket
+    stuck until its timeout (offline, firewalled) therefore can't keep
+    the QThread alive: on shutdown the QThread returns within ~50 ms and
+    the daemon thread is abandoned. Qt aborts the process if a running
+    QThread is destroyed, so this matters at exit.
+    """
     done = Signal(object)          # CurrencySnapshot
     failed = Signal(str)
     progress = Signal(int, int)
+
+    _POLL_SEC = 0.05
 
     def __init__(self, client: NinjaClient, league: str, force: bool):
         super().__init__()
@@ -129,13 +144,43 @@ class _FetchWorker(QThread):
         self._force = force
 
     def run(self) -> None:  # noqa: D401
-        try:
-            self.done.emit(self._c.fetch_all(
-                self._league, categories=ALL_CATEGORIES, force=self._force,
-                progress=lambda n, t: self.progress.emit(n, t)))
-        except Exception as e:  # noqa: BLE001
-            log.warning("ninja fetch failed: %s", e)
-            self.failed.emit(str(e))
+        # Locals only: the daemon thread may outlive this QThread object.
+        client, league, force = self._c, self._league, self._force
+        box: dict = {}
+        ready = threading.Event()
+        cancel = threading.Event()
+
+        def fetch() -> None:
+            try:
+                box["snap"] = client.fetch_all(
+                    league, categories=ALL_CATEGORIES, force=force,
+                    progress=lambda n, t: box.__setitem__("progress", (n, t)),
+                    cancel=cancel)
+            except Exception as e:  # noqa: BLE001
+                box["err"] = e
+            finally:
+                ready.set()
+
+        threading.Thread(target=fetch, name="ninja-fetch",
+                         daemon=True).start()
+        shown = None
+        while True:
+            finished = ready.wait(self._POLL_SEC)
+            if self.isInterruptionRequested():
+                cancel.set()          # drop categories not yet started
+                return
+            # Progress is relayed from here so only this QThread emits.
+            prog = box.get("progress")
+            if prog is not None and prog != shown:
+                shown = prog
+                self.progress.emit(*prog)
+            if finished:
+                break
+        if "err" in box:
+            log.warning("ninja fetch failed: %s", box["err"])
+            self.failed.emit(str(box["err"]))
+        else:
+            self.done.emit(box["snap"])
 
 
 class _SortItem(QTableWidgetItem):
@@ -196,9 +241,14 @@ class FlipperWidget(QWidget):
             freshness_sec=int(cfg.get("flipper.cache_sec", 600)),
         )
         self._worker: Optional[_FetchWorker] = None
+        self._shut_down = False
         self._build()
-        # Fire an initial fetch so the page is useful on first open.
-        QTimer.singleShot(200, lambda: self.refresh())
+        # Fire an initial fetch so the page is useful on first open. A
+        # member timer (not QTimer.singleShot) so shutdown() can stop it.
+        self._initial_timer = QTimer(self)
+        self._initial_timer.setSingleShot(True)
+        self._initial_timer.timeout.connect(lambda: self.refresh())
+        self._initial_timer.start(200)
 
         # Optional auto-refresh.
         self._auto_timer = QTimer(self)
@@ -375,8 +425,39 @@ class FlipperWidget(QWidget):
         except Exception:
             log.exception("failed to persist flipper prefs")
 
+    # -- lifecycle --
+    def shutdown(self, wait_ms: int = 2000) -> None:
+        """Stop timers and the fetch worker; later refreshes are no-ops.
+
+        Call before the widget goes away (MainWindow.closeEvent does).
+        Idempotent. An in-flight HTTP request is abandoned, not awaited
+        (see _FetchWorker), so this returns quickly even offline.
+        """
+        if self._shut_down:
+            return
+        self._shut_down = True
+        for t in (self._initial_timer, self._auto_timer, self._age_timer):
+            t.stop()
+        w, self._worker = self._worker, None
+        if w is None:
+            return
+        for sig in (w.done, w.failed, w.progress, w.finished):
+            try:
+                sig.disconnect()
+            except (RuntimeError, TypeError):
+                pass
+        w.requestInterruption()
+        if not w.wait(wait_ms):
+            # Shouldn't happen (the worker polls every 50 ms). Keep it
+            # referenced so it isn't destroyed while running.
+            log.warning("flipper fetch worker did not stop in %d ms",
+                        wait_ms)
+            _ORPHANS.add(w)
+
     # -- fetch --
     def refresh(self, *, force: bool = False) -> None:
+        if self._shut_down:
+            return
         if self._worker and self._worker.isRunning():
             return
         league = self.league_box.league()
@@ -388,16 +469,24 @@ class FlipperWidget(QWidget):
         self._worker.progress.connect(
             lambda n, t: self.status.setText(
                 f"Fetching {league} Prices…  {n} / {t} Categories"))
-        self._worker.finished.connect(
-            lambda: self.refresh_btn.setEnabled(True))
+        self._worker.finished.connect(self._on_fetch_finished)
         self._worker.start()
 
+    def _on_fetch_finished(self) -> None:
+        if not self._shut_down:
+            self.refresh_btn.setEnabled(True)
+
     def _on_fetch_done(self, snap) -> None:
+        # A result queued before shutdown() disconnected can still land.
+        if self._shut_down:
+            return
         self._snapshot = snap
         self._lines = list(snap.lines)
         self._rescore_and_render()
 
     def _on_fetch_failed(self, msg: str) -> None:
+        if self._shut_down:
+            return
         self.status.setText(f"⚠  {capitalise(msg)}")
         if not self._lines:
             self.age_card.set("—", "Fetch Failed", color=S.DANGER)

@@ -44,6 +44,7 @@ from __future__ import annotations
 
 import json
 import logging
+import threading
 import time
 import urllib.error
 import urllib.parse
@@ -279,29 +280,49 @@ class NinjaClient:
     # -- fetch --
     def fetch_all(self, league: str, *, categories=ALL_CATEGORIES,
                   force: bool = False, workers: int = 4,
-                  progress=None) -> CurrencySnapshot:
+                  progress=None,
+                  cancel: threading.Event | None = None) -> CurrencySnapshot:
         """Fetch every category and merge them into one snapshot.
 
         Categories that fail (unknown to poe.ninja, network) are listed
         in ``missing``; only when all of them fail is the error raised.
         ``progress(done, total)`` is called as each one finishes.
+
+        Setting ``cancel`` makes this raise ``FetchCancelled`` promptly:
+        categories not yet started are dropped and in-flight requests
+        are left to finish on their own. The pool's threads aren't
+        daemons (Python joins them at exit), so without this an
+        abandoned offline fetch would hold up exit for every category.
         """
-        from concurrent.futures import ThreadPoolExecutor, as_completed
+        from concurrent.futures import FIRST_COMPLETED, ThreadPoolExecutor, wait
         snaps: list[CurrencySnapshot] = []
         missing: list[str] = []
         errors: list[Exception] = []
         cats = [c for c in categories if c not in EXCLUDED_CATEGORIES]
-        with ThreadPoolExecutor(max_workers=max(1, workers)) as pool:
+        pool = ThreadPoolExecutor(max_workers=max(1, workers))
+        cancelled = False
+        try:
             futs = {pool.submit(self.fetch_currency, league, force=force,
                                 kind=c): c for c in cats}
-            for n, fut in enumerate(as_completed(futs), 1):
-                try:
-                    snaps.append(fut.result())
-                except Exception as e:  # noqa: BLE001
-                    missing.append(futs[fut])
-                    errors.append(e)
-                if progress is not None:
-                    progress(n, len(cats))
+            pending, n = set(futs), 0
+            while pending:
+                if cancel is not None and cancel.is_set():
+                    cancelled = True
+                    raise FetchCancelled("fetch cancelled")
+                done, pending = wait(
+                    pending, timeout=None if cancel is None else 0.1,
+                    return_when=FIRST_COMPLETED)
+                for fut in done:
+                    n += 1
+                    try:
+                        snaps.append(fut.result())
+                    except Exception as e:  # noqa: BLE001
+                        missing.append(futs[fut])
+                        errors.append(e)
+                    if progress is not None:
+                        progress(n, len(cats))
+        finally:
+            pool.shutdown(wait=not cancelled, cancel_futures=cancelled)
         if not snaps:
             raise errors[0] if errors else NinjaError("nothing to fetch")
         lines = [l for sn in snaps for l in sn.lines]
@@ -417,6 +438,10 @@ def _lines(raw: dict) -> list[dict]:
 
 class NinjaError(RuntimeError):
     """A fetch failure worded for the status line."""
+
+
+class FetchCancelled(NinjaError):
+    """``fetch_all`` was cancelled before it finished."""
 
 
 def _friendly_error(e: Exception, league: str) -> str:

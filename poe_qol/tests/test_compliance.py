@@ -145,12 +145,16 @@ class UiTests(unittest.TestCase):
         sch = Scheduler(cfg, AppState(), InputSender(), HotkeyRouter())
         sch.load()
         self.addCleanup(sch.shutdown)
-        return MainWindow(cfg, sch.state, sch)
+        win = MainWindow(cfg, sch.state, sch)
+        # Close even if the test fails: closeEvent shuts down the
+        # Flipper's timers/fetch thread, which would otherwise hit
+        # poe.ninja whenever a later test spins the event loop.
+        self.addCleanup(win.close)
+        return win
 
     def test_window_title_is_product_name(self) -> None:
         win = self._window()
         self.assertEqual(win.windowTitle(), "Twice Corrupted")
-        win.close()
 
     def test_slot_tabs_offer_overlay_but_no_dump(self) -> None:
         from PySide6.QtWidgets import QPushButton
@@ -162,7 +166,6 @@ class UiTests(unittest.TestCase):
             labels = [b.text() for b in sel.findChildren(QPushButton)]
             self.assertFalse([t for t in labels if "dump" in t.lower()], labels)
             self.assertTrue([t for t in labels if "overlay" in t.lower()], labels)
-        win.close()
 
     def test_sidebar_reaches_every_page(self) -> None:
         win = self._window()
@@ -171,7 +174,6 @@ class UiTests(unittest.TestCase):
             win._nav_select(i)
             self.assertEqual(win.pages.currentIndex(), i)
             self.assertTrue(win._nav_buttons[i].isChecked())
-        win.close()
 
     def test_every_page_has_help_badges(self) -> None:
         from poe_qol.ui.components import HelpBadge
@@ -180,12 +182,21 @@ class UiTests(unittest.TestCase):
             badges = win.pages.widget(i).findChildren(HelpBadge)
             self.assertTrue(badges, f"page {i} has no '?' help")
             self.assertTrue(all(b.help_text for b in badges))
-        win.close()
 
     def test_about_shows_disclaimer(self) -> None:
         win = self._window()
         self.assertIn(DISCLAIMER, win.about_text())
+
+    def test_close_stops_flipper_fetch(self) -> None:
+        from PySide6.QtCore import QEventLoop, QTimer
+        win = self._window()
         win.close()
+        self.assertTrue(win._flipper._shut_down)
+        # Spin past the Flipper's 200 ms initial-fetch delay.
+        loop = QEventLoop()
+        QTimer.singleShot(400, loop.quit)
+        loop.exec()
+        self.assertIsNone(win._flipper._worker)
 
 
 if __name__ == "__main__":
