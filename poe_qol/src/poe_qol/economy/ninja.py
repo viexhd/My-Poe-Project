@@ -57,8 +57,51 @@ from .. import __version__
 log = logging.getLogger("poe_qol.economy.ninja")
 
 EXCHANGE_URL = "https://poe.ninja/poe1/api/economy/exchange/current/overview"
+STASH_URL = "https://poe.ninja/poe1/api/economy/stash/current/item/overview"
 LEGACY_URL = "https://poe.ninja/api/data/currencyoverview"
-_ENDPOINTS = (EXCHANGE_URL, LEGACY_URL)
+
+# poe.ninja categories. Bulk-traded ones come from the exchange
+# overview; the rest (gems, maps, uniques…) from the stash item
+# overview. Unique weapons and armour are left out on purpose: too many
+# variants to flip.
+EXCHANGE_CATEGORIES = (
+    "Currency", "Fragment", "Scarab", "Essence", "Fossil", "Resonator",
+    "Oil", "DeliriumOrb", "DivinationCard", "Omen", "Tattoo", "Artifact",
+    "AllflameEmber", "Astrolabe",
+)
+ITEM_CATEGORIES = (
+    "SkillGem", "Map", "UniqueMap", "BlightedMap", "BlightRavagedMap",
+    "Invitation", "Memory", "Incubator", "Beast", "Vial", "UniqueJewel",
+    "UniqueFlask", "UniqueAccessory", "UniqueRelic",
+)
+EXCLUDED_CATEGORIES = ("UniqueWeapon", "UniqueArmour")
+ALL_CATEGORIES = EXCHANGE_CATEGORIES + ITEM_CATEGORIES
+CATEGORY_LABELS = {
+    "Currency": "Currency", "Fragment": "Fragments", "Scarab": "Scarabs",
+    "Essence": "Essences", "Fossil": "Fossils", "Resonator": "Resonators",
+    "Oil": "Oils", "DeliriumOrb": "Delirium Orbs",
+    "DivinationCard": "Divination Cards", "Omen": "Omens",
+    "Tattoo": "Tattoos", "Artifact": "Artifacts",
+    "AllflameEmber": "Allflame Embers", "Astrolabe": "Astrolabes",
+    "SkillGem": "Skill Gems", "Map": "Maps", "UniqueMap": "Unique Maps",
+    "BlightedMap": "Blighted Maps", "BlightRavagedMap": "Blight-Ravaged Maps",
+    "Invitation": "Invitations", "Memory": "Memories",
+    "Incubator": "Incubators", "Beast": "Beasts", "Vial": "Vials",
+    "UniqueJewel": "Unique Jewels", "UniqueFlask": "Unique Flasks",
+    "UniqueAccessory": "Unique Accessories", "UniqueRelic": "Unique Relics",
+}
+
+
+def category_label(category: str) -> str:
+    return CATEGORY_LABELS.get(category, category)
+
+
+def _endpoints(category: str) -> tuple[str, ...]:
+    if category in ITEM_CATEGORIES:
+        return (STASH_URL,)
+    if category in ("Currency", "Fragment"):      # also had a legacy form
+        return (EXCHANGE_URL, LEGACY_URL)
+    return (EXCHANGE_URL,)
 _MAX_CROSS_GAP = 0.25   # bigger cross-pair gaps are treated as noise
 # poe.ninja asks API clients for an identifying User-Agent.
 _UA = (f"TwiceCorrupted/{__version__} "
@@ -108,6 +151,24 @@ class CurrencyLine:
     # *is* chaos or the rate is unknown.
     cross_chaos: float | None = None
 
+    # ---- category / item-overview extras ----
+    category: str = "Currency"           # poe.ninja category id
+    # Listings on the trade site (item overview only; replaces volume).
+    listings: int | None = None
+    # What to search for on the trade site (item overview only).
+    search_name: str = ""
+    search_type: str = ""
+    gem_level: int | None = None
+    gem_quality: int | None = None
+    links: int | None = None
+    map_tier: int | None = None
+    corrupted: bool | None = None
+
+    @property
+    def is_bulk(self) -> bool:
+        """Traded on the bulk exchange (vs. individual listings)."""
+        return self.listings is None
+
     @property
     def has_book(self) -> bool:
         """True when separate bid/ask prices are known (legacy data)."""
@@ -151,6 +212,8 @@ class CurrencyLine:
         book counts as 3 round-trips, not 200. Exchange: chaos volume
         divided by the unit price.
         """
+        if self.listings is not None:
+            return max(0, self.listings)
         if self.volume_chaos is not None:
             if not self.chaos_equivalent:
                 return 0
@@ -164,7 +227,9 @@ class CurrencySnapshot:
     fetched_at: float                  # epoch seconds (data age)
     lines: list[CurrencyLine]
     stale: bool = False                # served from an expired cache
-    source: str = "exchange"           # "exchange" | "legacy"
+    source: str = "exchange"           # "exchange" | "legacy" | "stash" | "mixed"
+    # Categories that couldn't be loaded (unknown to poe.ninja, offline…)
+    missing: list[str] = field(default_factory=list)
 
     def by_name(self, name: str) -> CurrencyLine | None:
         low = name.lower()
@@ -206,9 +271,46 @@ class NinjaClient:
         return raw if isinstance(raw, dict) else None
 
     # -- fetch --
+    def fetch_all(self, league: str, *, categories=ALL_CATEGORIES,
+                  force: bool = False, workers: int = 4,
+                  progress=None) -> CurrencySnapshot:
+        """Fetch every category and merge them into one snapshot.
+
+        Categories that fail (unknown to poe.ninja, network) are listed
+        in ``missing``; only when all of them fail is the error raised.
+        ``progress(done, total)`` is called as each one finishes.
+        """
+        from concurrent.futures import ThreadPoolExecutor, as_completed
+        snaps: list[CurrencySnapshot] = []
+        missing: list[str] = []
+        errors: list[Exception] = []
+        cats = [c for c in categories if c not in EXCLUDED_CATEGORIES]
+        with ThreadPoolExecutor(max_workers=max(1, workers)) as pool:
+            futs = {pool.submit(self.fetch_currency, league, force=force,
+                                kind=c): c for c in cats}
+            for n, fut in enumerate(as_completed(futs), 1):
+                try:
+                    snaps.append(fut.result())
+                except Exception as e:  # noqa: BLE001
+                    missing.append(futs[fut])
+                    errors.append(e)
+                if progress is not None:
+                    progress(n, len(cats))
+        if not snaps:
+            raise errors[0] if errors else NinjaError("nothing to fetch")
+        lines = [l for sn in snaps for l in sn.lines]
+        sources = {sn.source for sn in snaps}
+        return CurrencySnapshot(
+            league=league,
+            fetched_at=min(sn.fetched_at for sn in snaps),
+            lines=lines,
+            stale=any(sn.stale for sn in snaps),
+            source=sources.pop() if len(sources) == 1 else "mixed",
+            missing=sorted(missing, key=cats.index))
+
     def fetch_currency(self, league: str, *, force: bool = False,
                        kind: str = "Currency") -> CurrencySnapshot:
-        """Fetch the ``Currency`` (default) or ``Fragment`` overview.
+        """Fetch one category's overview (``Currency`` by default).
 
         Returns the cached snapshot if it is within ``freshness_sec``,
         unless ``force=True``. If every endpoint fails, falls back to an
@@ -238,7 +340,7 @@ class NinjaClient:
                 except Exception:
                     log.exception("failed to write ninja cache %s", cache)
 
-        lines = list(_parse_lines(raw))
+        lines = list(_parse_lines(raw, kind))
         return CurrencySnapshot(league=league, fetched_at=fetched_at,
                                 lines=lines, stale=stale,
                                 source=response_kind(raw))
@@ -246,7 +348,7 @@ class NinjaClient:
     def _http_get(self, league: str, kind: str) -> dict:
         q = urllib.parse.urlencode({"league": league, "type": kind})
         last: Exception | None = None
-        for base in _ENDPOINTS:
+        for base in _endpoints(kind):
             url = f"{base}?{q}"
             log.info("GET %s", url)
             req = urllib.request.Request(
@@ -272,31 +374,112 @@ class NinjaError(RuntimeError):
 def _friendly_error(e: Exception, league: str) -> str:
     if isinstance(e, urllib.error.HTTPError):
         if e.code == 404:
-            return f"poe.ninja has no prices for league '{league}'"
-        return f"poe.ninja answered HTTP {e.code}"
+            return f"PoE Ninja Has No Prices For League '{league}'"
+        return f"PoE Ninja Answered HTTP {e.code}"
     if isinstance(e, urllib.error.URLError):
-        return "can't reach poe.ninja (offline or blocked)"
+        return "Can't Reach PoE Ninja (Offline Or Blocked)"
     if isinstance(e, NinjaError):
         return str(e)
-    return f"poe.ninja fetch failed ({e})"
+    return f"PoE Ninja Fetch Failed ({e})"
 
 
 # ---- parsing ------------------------------------------------------------
 
 def response_kind(raw: dict) -> str:
-    """``"exchange"`` or ``"legacy"``, decided from the first line."""
+    """``"exchange"``, ``"stash"`` or ``"legacy"``, from the first line."""
     for line in raw.get("lines") or []:
         if isinstance(line, dict):
-            return "legacy" if "currencyTypeName" in line else "exchange"
+            if "currencyTypeName" in line:
+                return "legacy"
+            if "chaosValue" in line:
+                return "stash"
+            return "exchange"
     return "exchange"
 
 
-def _parse_lines(raw: dict) -> Iterable[CurrencyLine]:
+def _parse_lines(raw: dict, category: str = "Currency") -> list[CurrencyLine]:
     if not isinstance(raw, dict):
-        return iter(())
-    if response_kind(raw) == "legacy":
-        return _parse_legacy(raw)
-    return _parse_exchange(raw)
+        return []
+    kind = response_kind(raw)
+    parser = {"legacy": _parse_legacy, "stash": _parse_stash}.get(
+        kind, _parse_exchange)
+    lines = list(parser(raw))
+    for l in lines:
+        l.category = category
+    return lines
+
+
+# -- stash item overview (gems, maps, uniques, beasts…) --
+
+def _int(v) -> int | None:
+    return int(v) if isinstance(v, (int, float)) and not isinstance(v, bool) else None
+
+
+def _parse_stash(raw: dict) -> Iterable[CurrencyLine]:
+    for line in raw.get("lines") or []:
+        if not isinstance(line, dict):
+            continue
+        name = str(line.get("name") or "").strip()
+        value = _num(line.get("chaosValue"))
+        if not name or not value or value <= 0:
+            continue
+        base = str(line.get("baseType") or "").strip()
+        gem_level = _int(line.get("gemLevel"))
+        gem_quality = _int(line.get("gemQuality"))
+        links = _int(line.get("links"))
+        tier = _int(line.get("mapTier"))
+        corrupted = line.get("corrupted") if isinstance(
+            line.get("corrupted"), bool) else None
+        variant = str(line.get("variant") or "").strip()
+
+        tags: list[str] = []
+        if gem_level:
+            tags.append(f"Level {gem_level}")
+        if gem_quality:
+            tags.append(f"{gem_quality}% Quality")
+        if links and links >= 5:
+            tags.append(f"{links} Link")
+        if tier:
+            tags.append(f"Tier {tier}")
+        if variant and variant.lower() not in " ".join(tags).lower():
+            tags.append(variant)
+        if corrupted:
+            tags.append("Corrupted")
+        label = name + (f" ({', '.join(tags)})" if tags else "")
+
+        data, change = _series(line.get("sparkline"))
+        if not data:
+            data, change2 = _series(line.get("lowConfidenceSparkline"))
+            change = change if change is not None else change2
+        listings = _int(line.get("listingCount"))
+        if listings is None:
+            listings = _int(line.get("count")) or 0
+        icon = line.get("icon")
+        unique = bool(base) and base != name
+        yield CurrencyLine(
+            name=label,
+            details_id=str(line.get("detailsId") or ""),
+            icon=icon if isinstance(icon, str) else None,
+            chaos_equivalent=value,
+            receive_count=0,
+            receive_change_7d=change,
+            pay_chaos=None,
+            pay_count=0,
+            pay_change_7d=None,
+            # No history, or only a handful of listings: poe.ninja's
+            # price is a guess.
+            low_confidence_receive=(not data) or listings < 5,
+            low_confidence_pay=False,
+            sparkline_receive=data,
+            listings=listings,
+            search_name=name if unique else "",
+            search_type=base if unique else name,
+            gem_level=gem_level,
+            gem_quality=gem_quality,
+            links=links,
+            map_tier=tier,
+            corrupted=corrupted,
+        )
 
 
 def _num(v) -> float | None:

@@ -2,7 +2,7 @@
 
 The Python package keeps its original import name, ``poe_qol``.
 """
-__version__ = "0.1.0"
+__version__ = "0.2.0"
 
 APP_NAME = "Twice Corrupted"
 APP_ID = "twice-corrupted"

@@ -18,8 +18,9 @@ from ..area_select.grid import load_geometry
 from ..area_select.settings import AreaSelectSettings, OverlaySettings
 
 MODIFIERS = ("alt", "ctrl+alt", "alt+shift")
+_MODIFIER_LABELS = {"alt": "Alt", "ctrl+alt": "Ctrl+Alt", "alt+shift": "Alt+Shift"}
 GRIDS = (("macros.inventory_dump", "Inventory"),
-         ("macros.map_stash_dump", "Map stash tab"))
+         ("macros.map_stash_dump", "Map Stash Tab"))
 
 EXPERIMENTAL_WARNING = (
     "Experimental transfer Ctrl-clicks every selected slot for you after "
@@ -45,6 +46,8 @@ class AreaSelectWidget(QWidget):
             controller.status_changed.connect(self._set_status)
 
     def _set_status(self, text: str) -> None:
+        from .text import capitalise
+        text = capitalise(text)
         self.status.setText(text)
         self.status.setVisible(bool(text))
 
@@ -58,7 +61,7 @@ class AreaSelectWidget(QWidget):
 
         # ---- hero: on/off ----
         hero, hv = card(variant="gilt")
-        self.enabled_cb = Switch("Alt + drag selection", big=True)
+        self.enabled_cb = Switch("Alt + Drag Selection", big=True)
         hv.addWidget(with_help(self.enabled_cb, (
             "Hold <b>Alt</b> and drag across the inventory to select "
             "slots. <b>Esc</b> cancels. Only starts inside the calibrated "
@@ -75,8 +78,9 @@ class AreaSelectWidget(QWidget):
         # ---- selection ----
         sel, f = card("Selection", icon="select")
         self.modifier = QComboBox()
-        self.modifier.addItems(MODIFIERS)
-        f.addWidget(field("Hold while dragging", self.modifier,
+        for m in MODIFIERS:
+            self.modifier.addItem(_MODIFIER_LABELS[m], m)
+        f.addWidget(field("Hold While Dragging", self.modifier,
                           "The key(s) you hold while dragging."))
         grids_row = QHBoxLayout()
         grids_row.setSpacing(18)
@@ -87,26 +91,26 @@ class AreaSelectWidget(QWidget):
             grids_row.addWidget(cb)
         grids_row.addStretch(1)
         gw = QWidget(); gw.setLayout(grids_row)
-        f.addWidget(field("Works on", gw,
+        f.addWidget(field("Works On", gw,
                           "Which grids the drag can select in."))
         dims = QHBoxLayout()
         self.cols = QSpinBox(); self.cols.setRange(1, 24)
         self.rows = QSpinBox(); self.rows.setRange(1, 24)
-        self.cols.setSuffix(" cols"); self.rows.setSuffix(" rows")
+        self.cols.setSuffix(" Cols"); self.rows.setSuffix(" Rows")
         dims.addWidget(self.cols); dims.addWidget(QLabel("×"))
         dims.addWidget(self.rows); dims.addStretch(1)
         dw = QWidget(); dw.setLayout(dims)
         self.bounds_label = caption("")
-        f.addWidget(field("Inventory grid", dw,
+        f.addWidget(field("Inventory Grid", dw,
                           "Columns × rows of your inventory. Screen "
                           "position comes from <b>Calibrate…</b> on the "
                           "Inventory page."))
         f.addWidget(self.bounds_label)
-        self.detect_cb = Switch("Spot empty slots")
+        self.detect_cb = Switch("Spot Empty Slots")
         f.addWidget(with_help(self.detect_cb,
                               "Looks at the screen to tell empty slots "
                               "from occupied ones. Read-only screen capture."))
-        self.skip_empty_cb = Switch("Skip empty slots")
+        self.skip_empty_cb = Switch("Skip Empty Slots")
         f.addWidget(with_help(self.skip_empty_cb,
                               "Leaves empty slots out of the selection."))
         f.addStretch(1)
@@ -114,13 +118,13 @@ class AreaSelectWidget(QWidget):
 
         # ---- overlay ----
         ov, f = card("Overlay", icon="eye")
-        self.overlay_cb = Switch("Show selection box")
+        self.overlay_cb = Switch("Show Selection Box")
         f.addWidget(with_help(self.overlay_cb,
                               "Draws the drag rectangle and slot marks "
                               "over the game while you drag."))
         self.opacity = QSlider(Qt.Orientation.Horizontal)
         self.opacity.setRange(0, 100)
-        f.addWidget(field("Box opacity", self.opacity))
+        f.addWidget(field("Box Opacity", self.opacity))
         self.border = QSpinBox(); self.border.setRange(1, 10); self.border.setSuffix(" px")
         f.addWidget(field("Border", self.border))
         self.debug_cb = Switch("Debug")
@@ -152,12 +156,12 @@ class AreaSelectWidget(QWidget):
         ef.setSpacing(18)
         self.delay = QSpinBox(); self.delay.setRange(20, 2000); self.delay.setSuffix(" ms")
         self.max_slots = QSpinBox(); self.max_slots.setRange(1, 200)
-        ef.addWidget(field("Delay between clicks", self.delay), 1)
-        ef.addWidget(field("Max slots per drag", self.max_slots), 1)
+        ef.addWidget(field("Delay Between Clicks", self.delay), 1)
+        ef.addWidget(field("Max Slots Per Drag", self.max_slots), 1)
         tv.addLayout(ef)
         self.exp_warning = QLabel(
-            "⚠  Not GGG-compliant. Use at your own risk. "
-            "F12, Esc or moving the mouse stops it.")
+            "⚠  Not GGG-Compliant. Use At Your Own Risk. "
+            "F12, Esc Or Moving The Mouse Stops It.")
         self.exp_warning.setWordWrap(True)
         self.exp_warning.setProperty("role", "warn")
         tv.addWidget(self.exp_warning)
@@ -170,7 +174,7 @@ class AreaSelectWidget(QWidget):
         for w in (self.enabled_cb, self.detect_cb, self.skip_empty_cb,
                   self.overlay_cb, self.debug_cb, *self.grid_cbs.values()):
             w.toggled.connect(self._save)
-        self.modifier.currentTextChanged.connect(self._save)
+        self.modifier.currentIndexChanged.connect(self._save)
         self.opacity.valueChanged.connect(self._save)
         for sb in (self.border, self.delay, self.max_slots):
             sb.valueChanged.connect(self._save)
@@ -182,7 +186,8 @@ class AreaSelectWidget(QWidget):
     def _load(self) -> None:
         s = AreaSelectSettings.load(self.cfg)
         self.enabled_cb.setChecked(s.enabled)
-        self.modifier.setCurrentText(s.modifier if s.modifier in MODIFIERS else "alt")
+        self.modifier.setCurrentIndex(max(0, self.modifier.findData(
+            s.modifier if s.modifier in MODIFIERS else "alt")))
         for ns, cb in self.grid_cbs.items():
             cb.setChecked(ns in s.grids)
         self.cols.setValue(int(self.cfg.get("macros.inventory_dump.grid.cols", 12)))
@@ -206,7 +211,7 @@ class AreaSelectWidget(QWidget):
             or ("macros.inventory_dump",)
         return s.replace(
             enabled=self.enabled_cb.isChecked(),
-            modifier=self.modifier.currentText(),
+            modifier=self.modifier.currentData() or "alt",
             grids=grids,
             detect_items=self.detect_cb.isChecked(),
             skip_empty=self.skip_empty_cb.isChecked(),
@@ -247,7 +252,7 @@ class AreaSelectWidget(QWidget):
             return
         if exp and not AreaSelectSettings.load(self.cfg).experimental.acknowledged:
             ok = QMessageBox.warning(
-                self, "Experimental transfer", EXPERIMENTAL_WARNING,
+                self, "Experimental Transfer", EXPERIMENTAL_WARNING,
                 QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
                 QMessageBox.StandardButton.No)
             if ok != QMessageBox.StandardButton.Yes:
@@ -272,7 +277,7 @@ class AreaSelectWidget(QWidget):
         try:
             b = load_geometry(self.cfg, "macros.inventory_dump").bounds()
             self.bounds_label.setText(
-                f"On screen: {b.left:.0f}, {b.top:.0f} → "
+                f"On Screen: {b.left:.0f}, {b.top:.0f} → "
                 f"{b.right:.0f}, {b.bottom:.0f}")
         except Exception as e:
-            self.bounds_label.setText(f"not calibrated ({e})")
+            self.bounds_label.setText(f"Not Calibrated ({e})")
