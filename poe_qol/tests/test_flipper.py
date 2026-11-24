@@ -274,6 +274,7 @@ class FlipperUiTests(unittest.TestCase):
         w._on_fetch_done(CurrencySnapshot("Mirage", time.time(),
                                           list(_parse_lines(raw))))
         self.addCleanup(w.close)
+        self.addCleanup(w.shutdown)
         return w, opened
 
     def test_price_column_sorts_numerically(self):
@@ -301,6 +302,40 @@ class FlipperUiTests(unittest.TestCase):
         q = json.loads(urllib.parse.unquote(url.split("?q=", 1)[1]))
         self.assertEqual(q["exchange"]["have"], ["chaos"])
         self.assertIn(q["exchange"]["want"][0], {"divine", "alch", "fusing"})
+
+    def test_shutdown_abandons_a_hung_fetch(self):
+        import threading, time
+        w, _ = self._widget()
+        del w.refresh                             # use the real one
+        release = threading.Event()
+        self.addCleanup(release.set)              # let the daemon finish
+
+        class _Hung:                              # offline: blocks on I/O
+            def fetch_currency(self, league, *, force=False):
+                release.wait(30)
+                raise OSError("timed out")
+        w._client = _Hung()
+        w.refresh(force=True)
+        worker = w._worker
+        self.assertTrue(worker.isRunning())
+
+        t0 = time.monotonic()
+        w.shutdown()
+        self.assertLess(time.monotonic() - t0, 1.0)
+        self.assertTrue(worker.isFinished())
+        self.assertIsNone(w._worker)
+
+    def test_shutdown_stops_timers_and_blocks_refresh(self):
+        w, _ = self._widget()
+        del w.refresh
+        w.auto_box.setCurrentIndex(w.auto_box.findData(5))
+        self.assertTrue(w._auto_timer.isActive())
+        w.shutdown()
+        for t in (w._initial_timer, w._auto_timer, w._age_timer):
+            self.assertFalse(t.isActive())
+        w.refresh(force=True)
+        self.assertIsNone(w._worker)
+        w.shutdown()                              # idempotent
 
 
 if __name__ == "__main__":

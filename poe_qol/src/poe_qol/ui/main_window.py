@@ -134,6 +134,8 @@ class MainWindow(QMainWindow):
         open_in_app = (self.open_trade_browser
                        if cfg.get("trade_browser.enabled", True) else None)
         self._wealth = WealthWidget(cfg)
+        # Flipper caches poe.ninja under <repo>/logs/ninja_cache.
+        self._flipper = FlipperWidget(cfg, _REPO, open_in_app=open_in_app)
         widgets = [
             self._build_home(),
             SlotSelector(cfg, cfg_path="macros.inventory_dump",
@@ -142,8 +144,7 @@ class MainWindow(QMainWindow):
                          title="Map Stash", scheduler=scheduler),
             AreaSelectWidget(cfg, area_select),
             MapSearchWidget(cfg, open_in_app=open_in_app),
-            # Flipper caches poe.ninja under <repo>/logs/ninja_cache.
-            FlipperWidget(cfg, _REPO, open_in_app=open_in_app),
+            self._flipper,
             PricerWidget(cfg),
             self._wealth,
         ]
@@ -430,6 +431,7 @@ class MainWindow(QMainWindow):
 
     def closeEvent(self, e) -> None:  # noqa: N802
         self._wealth.shutdown()
+        self._flipper.shutdown()
         if self._trade_browser is not None:
             self._trade_browser.close()
         super().closeEvent(e)
