@@ -51,7 +51,7 @@ tests/                  unittest suite
 * `Pause` toggles the master switch.
 * Emergency stop also releases Ctrl/Shift/Alt in case anything held them.
 * Re-entry is guarded in the `Macro` base class.
-* `tests/test_compliance.py` fails if a timer or bulk-click macro is registered again, or if the slot tabs regain a Dump action.
+* `tests/test_compliance.py` fails if a timer or bulk-click macro is registered again, or if the slot pages regain a Dump action.
 
 ## Map Search
 
@@ -69,7 +69,7 @@ When GGG changes a stat id between leagues, edit `map_mods.yaml`. No Python chan
 
 ## Visual slot selector
 
-The **Inventory** and **Map Stash** tabs render a config-driven grid of toggle buttons. They are **highlight-only**: nothing is clicked for you. Selection is written to `macros.inventory_dump.selected_slots` / `macros.map_stash_dump.selected_slots`. Those names are historical and kept for `user.yaml` compatibility. They provide:
+The **Inventory** and **Map Stash** pages render a config-driven grid of toggle buttons. They are **highlight-only**: nothing is clicked for you. Selection is written to `macros.inventory_dump.selected_slots` / `macros.map_stash_dump.selected_slots`. Those names are historical and kept for `user.yaml` compatibility. They provide:
 
 * **All / None / Invert** bulk actions.
 * Named profiles under `slot_profile_dir`, applied with `active_slot_profile`.
@@ -83,4 +83,4 @@ python -m unittest discover -s poe_qol/tests -v
 ```
 
 * `test_map_query.py`: `MapDataset` loading of the shipped catalogue, `build_map_query` payload shape, `build_url` copy mode, stale-stat stripping.
-* `test_compliance.py`: no retired macros registered, no input hotkeys in the shipped config, highlight-only slot tabs, product name, GGG disclaimer in About (offscreen Qt).
+* `test_compliance.py`: no retired macros registered, no input hotkeys in the shipped config, highlight-only slot pages, product name, GGG disclaimer in About (offscreen Qt).

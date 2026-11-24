@@ -10,7 +10,7 @@ from typing import Any, Optional
 
 from PySide6.QtCore import Qt
 from PySide6.QtWidgets import (
-    QButtonGroup, QCheckBox, QComboBox, QFormLayout, QGroupBox, QHBoxLayout,
+    QButtonGroup, QCheckBox, QComboBox, QGridLayout, QHBoxLayout,
     QLabel, QMessageBox, QRadioButton, QSlider, QSpinBox, QVBoxLayout, QWidget,
 )
 
@@ -42,92 +42,129 @@ class AreaSelectWidget(QWidget):
         self._load()
         self._loading = False
         if controller is not None:
-            controller.status_changed.connect(self.status.setText)
+            controller.status_changed.connect(self._set_status)
+
+    def _set_status(self, text: str) -> None:
+        self.status.setText(text)
+        self.status.setVisible(bool(text))
 
     # ---- construction ----
     def _build(self) -> None:
+        from .components import Switch, caption, card, field, with_help
+
         v = QVBoxLayout(self)
+        v.setContentsMargins(0, 0, 0, 0)
+        v.setSpacing(18)
 
-        intro = QLabel(
-            "Hold <b>Alt</b> and drag across the inventory to select slots, "
-            "like selecting files on the desktop. Esc cancels. The drag "
-            "only starts inside the calibrated grid, so Alt+clicking loot "
-            "elsewhere still reaches the game.")
-        intro.setWordWrap(True)
-        v.addWidget(intro)
+        # ---- hero: on/off ----
+        hero, hv = card(variant="gilt")
+        self.enabled_cb = Switch("Alt + drag selection", big=True)
+        hv.addWidget(with_help(self.enabled_cb, (
+            "Hold <b>Alt</b> and drag across the inventory to select "
+            "slots. <b>Esc</b> cancels. Only starts inside the calibrated "
+            "grid, so Alt-clicking loot elsewhere still reaches the game.")))
+        self.status = caption("")
+        self.status.setVisible(False)
+        hv.addWidget(self.status)
+        v.addWidget(hero)
 
-        self.enabled_cb = QCheckBox("Enable Alt+drag area selection")
-        v.addWidget(self.enabled_cb)
+        grid = QGridLayout()
+        grid.setHorizontalSpacing(18)
+        grid.setVerticalSpacing(18)
 
-        sel = QGroupBox("Selection")
-        f = QFormLayout(sel)
+        # ---- selection ----
+        sel, f = card("Selection", icon="select")
         self.modifier = QComboBox()
         self.modifier.addItems(MODIFIERS)
-        f.addRow("Hold while dragging:", self.modifier)
+        f.addWidget(field("Hold while dragging", self.modifier,
+                          "The key(s) you hold while dragging."))
         grids_row = QHBoxLayout()
+        grids_row.setSpacing(18)
         self.grid_cbs: dict[str, QCheckBox] = {}
         for ns, label in GRIDS:
-            cb = QCheckBox(label)
+            cb = Switch(label)
             self.grid_cbs[ns] = cb
             grids_row.addWidget(cb)
-        f.addRow("Works on:", grids_row)
+        grids_row.addStretch(1)
+        gw = QWidget(); gw.setLayout(grids_row)
+        f.addWidget(field("Works on", gw,
+                          "Which grids the drag can select in."))
         dims = QHBoxLayout()
         self.cols = QSpinBox(); self.cols.setRange(1, 24)
         self.rows = QSpinBox(); self.rows.setRange(1, 24)
-        dims.addWidget(self.cols); dims.addWidget(QLabel("columns ×"))
-        dims.addWidget(self.rows); dims.addWidget(QLabel("rows")); dims.addStretch(1)
-        f.addRow("Inventory grid:", dims)
-        self.bounds_label = QLabel()
-        self.bounds_label.setProperty("role", "caption")
-        self.bounds_label.setWordWrap(True)
-        f.addRow("Screen bounds:", self.bounds_label)
-        self.detect_cb = QCheckBox("Detect empty / occupied slots (screen capture)")
-        self.skip_empty_cb = QCheckBox("Leave empty slots out of the selection")
-        f.addRow(self.detect_cb)
-        f.addRow(self.skip_empty_cb)
-        v.addWidget(sel)
+        self.cols.setSuffix(" cols"); self.rows.setSuffix(" rows")
+        dims.addWidget(self.cols); dims.addWidget(QLabel("×"))
+        dims.addWidget(self.rows); dims.addStretch(1)
+        dw = QWidget(); dw.setLayout(dims)
+        self.bounds_label = caption("")
+        f.addWidget(field("Inventory grid", dw,
+                          "Columns × rows of your inventory. Screen "
+                          "position comes from <b>Calibrate…</b> on the "
+                          "Inventory page."))
+        f.addWidget(self.bounds_label)
+        self.detect_cb = Switch("Spot empty slots")
+        f.addWidget(with_help(self.detect_cb,
+                              "Looks at the screen to tell empty slots "
+                              "from occupied ones. Read-only screen capture."))
+        self.skip_empty_cb = Switch("Skip empty slots")
+        f.addWidget(with_help(self.skip_empty_cb,
+                              "Leaves empty slots out of the selection."))
+        f.addStretch(1)
+        grid.addWidget(sel, 0, 0)
 
-        ov = QGroupBox("Overlay")
-        f = QFormLayout(ov)
-        self.overlay_cb = QCheckBox("Show selection overlay")
-        f.addRow(self.overlay_cb)
+        # ---- overlay ----
+        ov, f = card("Overlay", icon="eye")
+        self.overlay_cb = Switch("Show selection box")
+        f.addWidget(with_help(self.overlay_cb,
+                              "Draws the drag rectangle and slot marks "
+                              "over the game while you drag."))
         self.opacity = QSlider(Qt.Orientation.Horizontal)
         self.opacity.setRange(0, 100)
-        f.addRow("Rectangle opacity:", self.opacity)
+        f.addWidget(field("Box opacity", self.opacity))
         self.border = QSpinBox(); self.border.setRange(1, 10); self.border.setSuffix(" px")
-        f.addRow("Border thickness:", self.border)
-        self.debug_cb = QCheckBox("Debug mode (draw grid bounds, log slot details)")
-        f.addRow(self.debug_cb)
-        v.addWidget(ov)
+        f.addWidget(field("Border", self.border))
+        self.debug_cb = Switch("Debug")
+        f.addWidget(with_help(self.debug_cb,
+                              "Draws the grid bounds and logs slot details. "
+                              "For lining things up."))
+        f.addStretch(1)
+        grid.addWidget(ov, 0, 1)
 
-        tr = QGroupBox("Transfer")
-        tv = QVBoxLayout(tr)
-        self.mode_manual = QRadioButton(
-            "Manual (recommended): highlight the slots, you Ctrl-click each one")
-        self.mode_exp = QRadioButton(
-            "Experimental: Ctrl-click every selected slot for me (NOT GGG-compliant)")
+        # ---- transfer ----
+        tr, tv = card("Transfer", "What happens after you let go.",
+                      icon="flip")
+        self.mode_manual = QRadioButton("Manual")
+        self.mode_exp = QRadioButton("Experimental")
         self._mode_group = QButtonGroup(self)
         self._mode_group.addButton(self.mode_manual)
         self._mode_group.addButton(self.mode_exp)
-        tv.addWidget(self.mode_manual)
-        tv.addWidget(self.mode_exp)
-        ef = QFormLayout()
+        modes = QHBoxLayout()
+        modes.setSpacing(24)
+        modes.addWidget(with_help(self.mode_manual, (
+            "<b>Recommended.</b> The slots stay highlighted and tick off "
+            "as you Ctrl-click each one yourself.")))
+        modes.addWidget(with_help(self.mode_exp, (
+            "Ctrl-clicks every selected slot for you. <b>Not "
+            "GGG-compliant</b>: many game actions from one input.")))
+        modes.addStretch(1)
+        tv.addLayout(modes)
+        ef = QHBoxLayout()
+        ef.setSpacing(18)
         self.delay = QSpinBox(); self.delay.setRange(20, 2000); self.delay.setSuffix(" ms")
         self.max_slots = QSpinBox(); self.max_slots.setRange(1, 200)
-        ef.addRow("Delay between clicks:", self.delay)
-        ef.addRow("Max slots per drag:", self.max_slots)
+        ef.addWidget(field("Delay between clicks", self.delay), 1)
+        ef.addWidget(field("Max slots per drag", self.max_slots), 1)
         tv.addLayout(ef)
         self.exp_warning = QLabel(
-            "⚠ Experimental transfer breaks GGG's one-action-per-key-press "
-            "rule. Use at your own risk. F12 / Esc / moving the mouse stops it.")
+            "⚠  Not GGG-compliant. Use at your own risk. "
+            "F12, Esc or moving the mouse stops it.")
         self.exp_warning.setWordWrap(True)
-        self.exp_warning.setStyleSheet("color:#E5484D; font-weight:600;")
+        self.exp_warning.setProperty("role", "warn")
         tv.addWidget(self.exp_warning)
-        v.addWidget(tr)
-
-        self.status = QLabel("")
-        self.status.setProperty("role", "caption")
-        v.addWidget(self.status)
+        grid.addWidget(tr, 1, 0, 1, 2)
+        grid.setColumnStretch(0, 1)
+        grid.setColumnStretch(1, 1)
+        v.addLayout(grid)
         v.addStretch(1)
 
         for w in (self.enabled_cb, self.detect_cb, self.skip_empty_cb,
@@ -235,8 +272,7 @@ class AreaSelectWidget(QWidget):
         try:
             b = load_geometry(self.cfg, "macros.inventory_dump").bounds()
             self.bounds_label.setText(
-                f"{b.left:.0f}, {b.top:.0f} → {b.right:.0f}, {b.bottom:.0f}  "
-                "(set with Calibrate… on the Inventory tab, or "
-                "grid.bounds in user.yaml)")
+                f"On screen: {b.left:.0f}, {b.top:.0f} → "
+                f"{b.right:.0f}, {b.bottom:.0f}")
         except Exception as e:
             self.bounds_label.setText(f"not calibrated ({e})")

@@ -31,6 +31,17 @@ where:
 The individual factors stay in [0, 1] so the composite score is
 interpretable (1.0 ≈ "perfect flip"). Users see both the score and
 the contributing factors in tooltips.
+
+Exchange data (poe.ninja's current API) has one market price per
+currency instead of a bid/ask book, so two factors change meaning:
+
+    volume_factor     — log-like on traded *chaos* volume per day.
+    spread_factor     — the cross-pair gap (chaos price vs. the price
+                        implied by its busiest pair, e.g. divines),
+                        mapped to [0.5, 1]. No gap is neutral (0.5),
+                        not zero, so liquid, steady currencies still
+                        rank instead of all scoring 0.
+    liquidity_factor  — 1.0 (no book to be lopsided).
 """
 from __future__ import annotations
 
@@ -47,6 +58,8 @@ _SPREAD_CAP = 0.50      # 50%+ spread contributes the same (probably wrong anywa
 _STABILITY_HALF = 10.0  # abs(7d change) at which stability_factor = 0.5
 _LOW_CONF_MULT = 0.35
 _LIQUIDITY_RATIO_KNEE = 5.0
+_CHAOS_VOL_HALF = 5000.0  # chaos traded/day at which volume_factor = 0.5
+_GAP_CAP = 0.10           # 10%+ cross-pair gap gets full marks
 
 
 @dataclass
@@ -68,6 +81,12 @@ class FlipOpportunity:
     def spread_pct(self) -> float | None: return self.line.spread_pct
     @property
     def spread_chaos(self) -> float | None: return self.line.spread_chaos
+    @property
+    def edge_pct(self) -> float | None: return self.line.edge_pct
+    @property
+    def volume_chaos(self) -> float | None: return self.line.volume_chaos
+    @property
+    def trade_id(self) -> str: return self.line.trade_id
     @property
     def volume(self) -> int: return self.line.daily_volume
     @property
@@ -93,6 +112,21 @@ def _volume_factor(vol: int) -> float:
     if vol <= 0:
         return 0.0
     return vol / (vol + _VOL_HALF)
+
+
+def _chaos_volume_factor(chaos: float | None) -> float:
+    """Same curve as :func:`_volume_factor`, on chaos traded per day."""
+    if not chaos or chaos <= 0:
+        return 0.0
+    return chaos / (chaos + _CHAOS_VOL_HALF)
+
+
+def _gap_factor(gap_pct: float | None) -> float:
+    """Cross-pair gap → [0.5, 1]. No gap (or unknown) is neutral."""
+    if gap_pct is None:
+        return 0.5
+    frac = min(abs(gap_pct) / 100.0, _GAP_CAP) / _GAP_CAP
+    return 0.5 + 0.5 * frac
 
 
 def _spread_factor(spread_pct: float | None) -> float:
@@ -136,17 +170,24 @@ def _confidence_factor(line: CurrencyLine) -> float:
 
 
 def _score_one(line: CurrencyLine) -> FlipOpportunity | None:
-    if line.chaos_equivalent is None or line.pay_chaos is None:
+    if not line.chaos_equivalent:
         return None
-    vol = _volume_factor(line.daily_volume)
     # Use the receive-side change as the stability proxy; traders care
     # about the sell price more than the bid.
     stab = _stability_factor(line.receive_change_7d
                              if line.receive_change_7d is not None
                              else line.pay_change_7d)
-    spread = _spread_factor(line.spread_pct)
     conf = _confidence_factor(line)
-    liq = _liquidity_factor(line.pay_count, line.receive_count)
+    if line.has_book:                       # legacy bid/ask data
+        vol = _volume_factor(line.daily_volume)
+        spread = _spread_factor(line.spread_pct)
+        liq = _liquidity_factor(line.pay_count, line.receive_count)
+    elif line.volume_chaos is not None:     # exchange data
+        vol = _chaos_volume_factor(line.volume_chaos)
+        spread = _gap_factor(line.cross_gap_pct)
+        liq = 1.0
+    else:
+        return None
 
     score = vol * spread * stab * conf * liq
     return FlipOpportunity(
@@ -163,7 +204,7 @@ def _score_one(line: CurrencyLine) -> FlipOpportunity | None:
 def score_currency_flips(lines: Iterable[CurrencyLine], *,
                          min_volume: int = 10,
                          include_low_confidence: bool = False,
-                         exclude: tuple[str, ...] = ("Chaos Orb",),
+                         exclude: tuple[str, ...] = ("Chaos Orb", "chaos"),
                          ) -> list[FlipOpportunity]:
     """Score and filter. Returns a list sorted by ``score`` desc.
 
@@ -174,7 +215,7 @@ def score_currency_flips(lines: Iterable[CurrencyLine], *,
     skip = {s.lower() for s in exclude}
     out: list[FlipOpportunity] = []
     for l in lines:
-        if l.name.lower() in skip:
+        if l.name.lower() in skip or l.trade_id.lower() in skip:
             continue
         if l.daily_volume < min_volume:
             continue

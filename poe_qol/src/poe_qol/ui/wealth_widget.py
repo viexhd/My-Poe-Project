@@ -12,8 +12,8 @@ from pathlib import Path
 
 from PySide6.QtCore import QPoint, QTimer
 from PySide6.QtWidgets import (
-    QCheckBox, QComboBox, QDoubleSpinBox, QFileDialog, QFormLayout,
-    QHBoxLayout, QLabel, QLineEdit, QListWidget, QPushButton, QSpinBox,
+    QComboBox, QDoubleSpinBox, QFileDialog,
+    QHBoxLayout, QLineEdit, QListWidget, QPushButton, QSpinBox,
     QVBoxLayout, QWidget,
 )
 
@@ -50,46 +50,91 @@ class WealthWidget(QWidget):
             self.overlay_cb.setChecked(True)
 
     # ---- construction ----
-    def _build(self) -> None:
-        v = QVBoxLayout(self)
-        intro = QLabel(
-            "Shows your divine-per-hour from Wealthy Exile CSV exports. On "
-            "wealthyexile.com press <b>Sync stash</b>, then <b>⋯ → Export "
-            "CSV</b>, and save the file into the folder below. Each new "
-            "export is compared with the previous one; the divine rate is "
-            "taken from the export's Divine Orb price unless you set one.")
-        intro.setWordWrap(True)
-        v.addWidget(intro)
+    def header_actions(self) -> list[QWidget]:
+        return [self.open_we_btn, self.refresh_btn]
 
-        form = QFormLayout()
-        row = QHBoxLayout()
+    def _build(self) -> None:
+        from . import styles as S
+        from .components import StatCard, Switch, card, field, with_help
+        from .icons import icon
+
+        v = QVBoxLayout(self)
+        v.setContentsMargins(0, 0, 0, 0)
+        v.setSpacing(18)
+
+        self.refresh_btn = QPushButton("Refresh")
+        self.refresh_btn.setProperty("role", "primary")
+        self.refresh_btn.setIcon(icon("refresh", "#1A1200"))
+        self.refresh_btn.setToolTip("Re-read the exports folder now.")
+        self.refresh_btn.clicked.connect(self.refresh)
+        self.open_we_btn = QPushButton("Wealthy Exile")
+        self.open_we_btn.setIcon(icon("external", S.FG_1))
+        self.open_we_btn.setToolTip("Open wealthyexile.com/stash in your browser.")
+        self.open_we_btn.clicked.connect(
+            lambda: webbrowser.open(WEALTHY_EXILE_STASH_URL))
+
+        # ---- hero ----
+        top = QHBoxLayout()
+        top.setSpacing(18)
+        self.rate_card = StatCard("Divine per hour", "—", hero=True, help=(
+            "Compares your two newest exports: how much your stash grew, "
+            "divided by the time between them."), icon="wealth",
+            accent=S.ACCENT)
+        self.reading_label = self.rate_card.value
+        self.detail_label = self.rate_card.sub
+        self.detail_label.setVisible(True)
+        top.addWidget(self.rate_card, 2)
+
+        oc, ol = card("Overlay", icon="eye")
+        self.overlay_cb = Switch("Show in game", big=True)
+        self.overlay_cb.toggled.connect(self._on_overlay_toggled)
+        ol.addWidget(with_help(self.overlay_cb, (
+            "A small always-on-top box over the game. Drag to move, "
+            "right-click for options. Needs windowed or "
+            "windowed-fullscreen.")))
+        ol.addStretch(1)
+        top.addWidget(oc, 1)
+        v.addLayout(top)
+
+        # ---- settings ----
+        sc, sl = card("Setup", (
+            "1. On wealthyexile.com press <b>Sync stash</b>.<br>"
+            "2. Open <b>⋯ → Export CSV</b> and save into your exports "
+            "folder.<br>3. Repeat later; each new export is compared with "
+            "the one before.<br><br>Only reads CSV files in that folder. "
+            "Never logs into Wealthy Exile."), icon="folder")
+        frow = QHBoxLayout()
         self.dir_edit = QLineEdit(self.cfg.get(_K_DIR) or "")
-        self.dir_edit.setPlaceholderText("Folder you save exports to")
+        self.dir_edit.setPlaceholderText("Choose the folder you save exports to")
         self.dir_edit.editingFinished.connect(self._on_dir_edited)
         browse = QPushButton("Browse…")
+        browse.setIcon(icon("folder", S.FG_1))
         browse.clicked.connect(self._browse)
-        row.addWidget(self.dir_edit, 1)
-        row.addWidget(browse)
-        form.addRow("Exports folder:", row)
+        frow.addWidget(self.dir_edit, 1)
+        frow.addWidget(browse)
+        fw = QWidget(); fw.setLayout(frow)
+        sl.addWidget(field("Exports folder", fw))
 
+        grid = QHBoxLayout()
+        grid.setSpacing(18)
         self.unit_box = QComboBox()
         for unit, label in (("chaos", "Chaos"), ("divine", "Divine")):
             self.unit_box.addItem(label, unit)
         i = self.unit_box.findData(self.cfg.get(_K_UNIT, "chaos"))
         self.unit_box.setCurrentIndex(max(0, i))
         self.unit_box.currentIndexChanged.connect(self._on_settings_changed)
-        form.addRow("CSV values are in:", self.unit_box)
+        grid.addWidget(field("CSV values in", self.unit_box,
+                             "The currency your export's totals are in."), 1)
 
         self.rate_spin = QDoubleSpinBox()
         self.rate_spin.setRange(0, 100000)
         self.rate_spin.setDecimals(1)
-        self.rate_spin.setSpecialValueText("auto (from export)")
-        self.rate_spin.setToolTip(
-            "Leave at 0 to use the Divine Orb price in your newest export. "
-            "Set a number to override it.")
+        self.rate_spin.setSpecialValueText("Auto")
         self.rate_spin.setValue(float(self.cfg.get(_K_RATE, 0) or 0))
         self.rate_spin.valueChanged.connect(self._on_settings_changed)
-        form.addRow("Chaos per divine:", self.rate_spin)
+        grid.addWidget(field("Chaos per divine", self.rate_spin,
+                             "<b>Auto</b> uses the Divine Orb price in your "
+                             "newest export. Type a number to override."), 1)
 
         self.interval_spin = QSpinBox()
         self.interval_spin.setRange(MIN_INTERVAL_MINUTES, 24 * 60)
@@ -97,40 +142,19 @@ class WealthWidget(QWidget):
         self.interval_spin.setValue(
             clamp_interval_minutes(self.cfg.get(_K_INTERVAL, MIN_INTERVAL_MINUTES)))
         self.interval_spin.valueChanged.connect(self._on_interval_changed)
-        form.addRow("Re-check every:", self.interval_spin)
-        v.addLayout(form)
+        grid.addWidget(field("Check every", self.interval_spin,
+                             f"How often to re-read the folder "
+                             f"(at least {MIN_INTERVAL_MINUTES} min)."), 1)
+        sl.addLayout(grid)
+        v.addWidget(sc)
 
-        actions = QHBoxLayout()
-        self.overlay_cb = QCheckBox("Show overlay over the game")
-        self.overlay_cb.toggled.connect(self._on_overlay_toggled)
-        refresh = QPushButton("Refresh now")
-        refresh.clicked.connect(self.refresh)
-        open_we = QPushButton("Open Wealthy Exile")
-        open_we.clicked.connect(lambda: webbrowser.open(WEALTHY_EXILE_STASH_URL))
-        actions.addWidget(self.overlay_cb)
-        actions.addStretch(1)
-        actions.addWidget(open_we)
-        actions.addWidget(refresh)
-        v.addLayout(actions)
-
-        self.reading_label = QLabel("—")
-        self.reading_label.setProperty("role", "section")
-        v.addWidget(self.reading_label)
-        self.detail_label = QLabel("")
-        self.detail_label.setWordWrap(True)
-        v.addWidget(self.detail_label)
-
-        v.addWidget(QLabel("Exports found (oldest first):"))
+        # ---- exports ----
+        ec, el = card("Exports", "Every export found, oldest first.",
+                      icon="clipboard")
         self.snap_list = QListWidget()
-        v.addWidget(self.snap_list, 1)
-
-        note = QLabel(
-            "Reads only CSV files in this folder. Sends nothing and never "
-            "logs into Wealthy Exile. Overlay needs PoE in windowed or "
-            "windowed-fullscreen mode.")
-        note.setWordWrap(True)
-        note.setProperty("role", "caption")
-        v.addWidget(note)
+        self.snap_list.setMinimumHeight(120)
+        el.addWidget(self.snap_list, 1)
+        v.addWidget(ec, 1)
 
     # ---- data ----
     def _source(self) -> CsvFolderSource:

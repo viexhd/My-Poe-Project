@@ -114,5 +114,194 @@ class ParseAndScoreTests(unittest.TestCase):
             self.assertLessEqual(f, 1.0)
 
 
+def _exchange(lines, items=None, primary="chaos"):
+    items = items or [{"id": l["id"], "name": l["id"].title() + " Orb",
+                       "image": f"/gen/{l['id']}.png",
+                       "detailsId": l["id"] + "-orb"} for l in lines]
+    return {"core": {"primary": primary, "secondary": "divine",
+                     "rates": {"divine": 1 / 160.0}},
+            "lines": lines, "items": items}
+
+
+def _xline(id_, value, volume, change=0.0, *, pair=None, rate=None,
+           history=True):
+    line = {"id": id_, "primaryValue": value, "volumePrimaryValue": volume,
+            "sparkline": {"data": [0, change / 2, change] if history else [],
+                          "totalChange": change}}
+    if pair:
+        line["maxVolumeCurrency"] = pair
+        line["maxVolumeRate"] = rate
+    return line
+
+
+class ExchangeParseTests(unittest.TestCase):
+    """poe.ninja's current endpoint (/poe1/api/economy/exchange/...)."""
+
+    def test_parses_names_values_volume_and_trade_id(self):
+        raw = _exchange([_xline("divine", 160.0, 320000.0, change=-2.0),
+                         _xline("alch", 0.5, 2000.0)])
+        lines = {l.name: l for l in _parse_lines(raw)}
+        div = lines["Divine Orb"]
+        self.assertEqual(div.trade_id, "divine")
+        self.assertEqual(div.details_id, "divine-orb")
+        self.assertAlmostEqual(div.chaos_equivalent, 160.0)
+        self.assertEqual(div.daily_volume, 2000)          # 320000c / 160c
+        self.assertAlmostEqual(div.receive_change_7d, -2.0)
+        self.assertTrue(div.icon.startswith("https://"))
+        self.assertIsNone(div.pay_chaos)
+        self.assertFalse(div.has_book)
+
+    def test_cross_pair_gap_either_rate_direction(self):
+        # Exalt trades mostly against divine. 1 exalt = 0.1 div = 16c
+        # implied, vs 15c on the chaos market: a +6.7% gap.
+        for rate in (0.1, 10.0):     # div per exalt, or exalt per div
+            raw = _exchange([_xline("divine", 160.0, 1e6),
+                             _xline("exalted", 15.0, 5e4,
+                                    pair="divine", rate=rate)])
+            ex = next(l for l in _parse_lines(raw) if l.trade_id == "exalted")
+            self.assertAlmostEqual(ex.cross_gap_pct, 6.67, places=1)
+            self.assertAlmostEqual(ex.edge_pct, ex.cross_gap_pct)
+
+    def test_absurd_cross_rate_is_ignored(self):
+        raw = _exchange([_xline("divine", 160.0, 1e6),
+                         _xline("exalted", 15.0, 5e4, pair="divine", rate=5.0)])
+        ex = next(l for l in _parse_lines(raw) if l.trade_id == "exalted")
+        self.assertIsNone(ex.cross_gap_pct)
+
+    def test_no_history_is_low_confidence(self):
+        raw = _exchange([_xline("mirror", 50000.0, 1e5, history=False)])
+        (line,) = list(_parse_lines(raw))
+        self.assertTrue(line.low_confidence_receive)
+
+    def test_exchange_lines_score_and_rank(self):
+        raw = _exchange([
+            _xline("divine", 160.0, 800000.0, change=1.0),   # deep, steady
+            _xline("fusing", 0.8, 300.0, change=30.0),       # thin, volatile
+            _xline("chaos", 1.0, 1e6),                       # the unit
+        ])
+        ops = score_currency_flips(list(_parse_lines(raw)))
+        self.assertEqual([o.trade_id for o in ops], ["divine", "fusing"])
+        self.assertGreater(ops[0].score, ops[1].score)
+        for o in ops:
+            self.assertGreaterEqual(o.score, 0.0)
+            self.assertLessEqual(o.score, 1.0)
+
+    def test_gap_boosts_score(self):
+        raw = _exchange([
+            _xline("divine", 160.0, 1e6),
+            _xline("a", 15.0, 5e4, pair="divine", rate=0.1),   # 6.7% gap
+            _xline("b", 16.0, 5e4, pair="divine", rate=0.1),   # no gap
+        ])
+        ops = {o.trade_id: o for o in score_currency_flips(
+            list(_parse_lines(raw)))}
+        self.assertGreater(ops["a"].score, ops["b"].score)
+
+
+class LegacyConfidenceTests(unittest.TestCase):
+    def test_empty_main_series_means_low_confidence(self):
+        """poe.ninja sends both series; an empty main one is the signal."""
+        line = _mk_line("Thin", 0.1, 20, 12.0, 20, change=3.0)
+        line["receiveSparkLine"] = {"data": [], "totalChange": 0}
+        line["lowConfidenceReceiveSparkLine"] = {"data": [1, 2, 3],
+                                                 "totalChange": 3.0}
+        (parsed,) = list(_parse_lines({"lines": [line]}))
+        self.assertTrue(parsed.low_confidence_receive)
+        self.assertAlmostEqual(parsed.receive_change_7d, 3.0)
+
+
+class ClientFallbackTests(unittest.TestCase):
+    def test_stale_cache_used_when_offline(self):
+        import json, os, tempfile, time, urllib.error
+        from pathlib import Path
+        from poe_qol.economy.ninja import NinjaClient
+        tmp = Path(tempfile.mkdtemp())
+        c = NinjaClient(tmp, freshness_sec=1)
+        cache = c._cache_path("Mirage", "Currency")
+        cache.write_text(json.dumps(_exchange([_xline("divine", 160.0, 1e6)])))
+        old = time.time() - 3600
+        os.utime(cache, (old, old))
+
+        def boom(*_a, **_k):
+            raise urllib.error.URLError("offline")
+        c._http_get = boom
+        snap = c.fetch_currency("Mirage")
+        self.assertTrue(snap.stale)
+        self.assertEqual(snap.source, "exchange")
+        self.assertEqual(snap.lines[0].name, "Divine Orb")
+
+    def test_no_cache_and_offline_raises_friendly_error(self):
+        import tempfile, urllib.error
+        from pathlib import Path
+        from poe_qol.economy.ninja import NinjaClient, NinjaError
+        c = NinjaClient(Path(tempfile.mkdtemp()))
+
+        def boom(*_a, **_k):
+            raise urllib.error.URLError("offline")
+        c._http_get = boom
+        with self.assertRaises(NinjaError) as cm:
+            c.fetch_currency("Mirage")
+        self.assertIn("reach poe.ninja", str(cm.exception))
+
+
+
+class FlipperUiTests(unittest.TestCase):
+    """Offscreen Qt checks for the Flipper page fixes."""
+
+    @classmethod
+    def setUpClass(cls):
+        import os
+        os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
+        from PySide6.QtWidgets import QApplication
+        cls._app = QApplication.instance() or QApplication([])
+
+    def _widget(self):
+        import shutil, tempfile, time
+        from pathlib import Path
+        from poe_qol.core.config import ConfigStore
+        from poe_qol.economy.ninja import CurrencySnapshot
+        from poe_qol.ui.flipper_widget import FlipperWidget
+        root = Path(__file__).resolve().parents[1]
+        tmp = Path(tempfile.mkdtemp())
+        self.addCleanup(shutil.rmtree, tmp, True)
+        shutil.copytree(root / "config", tmp / "config",
+                        ignore=shutil.ignore_patterns("user.yaml"))
+        opened = []
+        w = FlipperWidget(ConfigStore(tmp), tmp, open_in_app=opened.append)
+        w.refresh = lambda *a, **k: None          # no network
+        raw = _exchange([_xline("divine", 1200.0, 2e6),
+                         _xline("alch", 9.5, 4e4),
+                         _xline("fusing", 85.0, 3e3)])
+        w._on_fetch_done(CurrencySnapshot("Mirage", time.time(),
+                                          list(_parse_lines(raw))))
+        self.addCleanup(w.close)
+        return w, opened
+
+    def test_price_column_sorts_numerically(self):
+        from PySide6.QtCore import Qt
+        w, _ = self._widget()
+        w.table.sortItems(1, Qt.SortOrder.AscendingOrder)
+        prices = [w.table.item(r, 1).text() for r in range(w.table.rowCount())]
+        self.assertEqual(prices, ["9.50 c", "85.0 c", "1,200 c"])
+
+    def test_lowering_min_volume_brings_rows_back(self):
+        w, _ = self._widget()
+        w.min_vol.setValue(100)       # fusing: 3000c / 85c ≈ 35 units
+        self.assertEqual(w.table.rowCount(), 2)
+        w.min_vol.setValue(10)
+        self.assertEqual(w.table.rowCount(), 3)
+
+    def test_double_click_opens_bulk_exchange_query(self):
+        import json, urllib.parse
+        w, opened = self._widget()
+        w._open_trade_for_item(w.table.item(0, 0))
+        self.assertEqual(len(opened), 1)
+        url = opened[0]
+        self.assertTrue(url.startswith(
+            "https://www.pathofexile.com/trade/exchange/Mirage?q="), url)
+        q = json.loads(urllib.parse.unquote(url.split("?q=", 1)[1]))
+        self.assertEqual(q["exchange"]["have"], ["chaos"])
+        self.assertIn(q["exchange"]["want"][0], {"divine", "alch", "fusing"})
+
+
 if __name__ == "__main__":
     unittest.main()
