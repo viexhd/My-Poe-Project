@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "twice-corrupted"
-version = "0.2.1"
+version = "0.2.2"
 description = "Twice Corrupted: a quality-of-life companion for Path of Exile"
 requires-python = ">=3.11"
 readme = "README.md"

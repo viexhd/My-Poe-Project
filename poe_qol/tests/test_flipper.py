@@ -484,6 +484,53 @@ class FetchAllTests(unittest.TestCase):
         self.assertEqual(len(started), 2)         # queued ones never ran
 
 
+class EndpointFallbackTests(unittest.TestCase):
+    """A category poe.ninja serves from the 'other' overview still loads."""
+
+    def _client_with(self, responses):
+        import io, json, tempfile, urllib.error
+        from pathlib import Path
+        import poe_qol.economy.ninja as N
+        c = N.NinjaClient(Path(tempfile.mkdtemp()))
+        seen = []
+
+        class _Resp(io.BytesIO):
+            def __enter__(self): return self
+            def __exit__(self, *a): return False
+
+        def fake_urlopen(req, timeout=None):
+            url = req.full_url
+            seen.append(url.split("?")[0])
+            for base, body in responses.items():
+                if url.startswith(base):
+                    return _Resp(json.dumps(body).encode())
+            raise urllib.error.HTTPError(url, 404, "Not Found", {}, None)
+        orig = N.urllib.request.urlopen
+        N.urllib.request.urlopen = fake_urlopen
+        self.addCleanup(setattr, N.urllib.request, "urlopen", orig)
+        return c, seen
+
+    def test_exchange_category_found_in_item_overview(self):
+        import poe_qol.economy.ninja as N
+        c, seen = self._client_with({N.STASH_URL: _stash([
+            {"name": "Gilded Divination Scarab", "chaosValue": 12.0,
+             "listingCount": 80, "sparkline": {"data": [1], "totalChange": 0}}])})
+        snap = c.fetch_currency("Covens", kind="Scarab")
+        self.assertEqual(seen, [N.EXCHANGE_URL, N.STASH_URL])
+        (line,) = snap.lines
+        self.assertEqual(line.category, "Scarab")
+        self.assertEqual(line.name, "Gilded Divination Scarab")
+
+    def test_item_category_found_in_exchange_overview(self):
+        import poe_qol.economy.ninja as N
+        c, seen = self._client_with({N.EXCHANGE_URL: _exchange(
+            [_xline("vial-of-awakening", 30.0, 9000.0)])})
+        snap = c.fetch_currency("Covens", kind="Vial")
+        self.assertEqual(seen, [N.STASH_URL, N.EXCHANGE_URL])
+        self.assertEqual(snap.lines[0].category, "Vial")
+        self.assertTrue(snap.lines[0].is_bulk)
+
+
 class TradeLinkTests(unittest.TestCase):
     def test_item_link_is_a_filtered_search(self):
         import json, urllib.parse

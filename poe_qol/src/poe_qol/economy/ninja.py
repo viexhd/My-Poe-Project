@@ -98,11 +98,18 @@ def category_label(category: str) -> str:
 
 
 def _endpoints(category: str) -> tuple[str, ...]:
-    if category in ITEM_CATEGORIES:
-        return (STASH_URL,)
+    """Where to look for a category, most likely first.
+
+    poe.ninja moves categories between the bulk-exchange and the item
+    overview (v0.2.1's live check found Scarab, Memory, Incubator and
+    Vial missing from the endpoint expected), so each category falls
+    back to the other one; the parser reads either response shape.
+    """
     if category in ("Currency", "Fragment"):      # also had a legacy form
         return (EXCHANGE_URL, LEGACY_URL)
-    return (EXCHANGE_URL,)
+    if category in ITEM_CATEGORIES:
+        return (STASH_URL, EXCHANGE_URL)
+    return (EXCHANGE_URL, STASH_URL)
 # Raw item overviews for stash valuation (economy/pricing.py): the parsed
 # lines above drop fields valuation needs (base type, gem quality,
 # corrupted), so pricing reads the raw lines. Legacy endpoint as fallback.
@@ -323,6 +330,9 @@ class NinjaClient:
                         progress(n, len(cats))
         finally:
             pool.shutdown(wait=not cancelled, cancel_futures=cancelled)
+        if missing:
+            log.warning("poe.ninja: no data for %s (%s)", ", ".join(missing),
+                        "; ".join(str(e)[:80] for e in errors[:3]))
         if not snaps:
             raise errors[0] if errors else NinjaError("nothing to fetch")
         lines = [l for sn in snaps for l in sn.lines]
@@ -375,7 +385,7 @@ class NinjaClient:
     def _http_get(self, league: str, kind: str) -> dict:
         q = urllib.parse.urlencode({"league": league, "type": kind})
         last: Exception | None = None
-        for base in _endpoints(kind):
+        for i, base in enumerate(_endpoints(kind)):
             url = f"{base}?{q}"
             log.info("GET %s", url)
             req = urllib.request.Request(
@@ -388,6 +398,9 @@ class NinjaClient:
                 last = e
                 continue
             if isinstance(raw, dict) and raw.get("lines"):
+                if i:
+                    log.warning("poe.ninja: %s came from the fallback "
+                                "endpoint %s", kind, base)
                 return raw
             last = NinjaError(f"no prices for league '{league}'")
         assert last is not None
