@@ -153,8 +153,8 @@ flipper:
   # League defaults to trade.league if unset; the UI lets you override
   # so you can watch a different league without touching the trade tab.
   league: null
-  # Drop currencies with fewer than this many daily round-trip-able
-  # trades (min of pay/receive counts). 10 is enough signal to matter
+  # Drop currencies that trade fewer than this many units a day
+  # (poe.ninja exchange volume / price). 10 is enough signal to matter
   # without flooding the table with fringe items.
   min_volume: 10
   # poe.ninja flags thin-data entries as low-confidence; skipping them

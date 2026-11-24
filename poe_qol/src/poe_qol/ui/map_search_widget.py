@@ -94,20 +94,23 @@ class _ModButton(QPushButton):
         self.mod_id = mod_id
         self.setCheckable(True)
         self.setCursor(Qt.CursorShape.PointingHandCursor)
-        self.setSizePolicy(QSizePolicy.Policy.Expanding,
+        self.setSizePolicy(QSizePolicy.Policy.Preferred,
                            QSizePolicy.Policy.Fixed)
         # Checked uses a translucent fill with a solid category-colored
         # border so neighboring chips don't visually clash on dark bg.
         # `_tint_rgba` keeps alpha independent of the source hex.
         tint = _tint_rgba(color, 0.28)
+        self.setMinimumHeight(40)
+        self.setToolTip(label)
         self.setStyleSheet(
-            "QPushButton { padding: 6px 10px; border: 1px solid #33262A;"
-            " border-radius: 4px; background:#1C1518; color:#EFE6DA;"
-            " text-align:left; }"
+            "QPushButton { padding: 8px 12px; border: 1px solid #33262A;"
+            " border-radius: 10px; background:#1C1518; color:#EFE6DA;"
+            " text-align:left; font-size:13px; }"
             f"QPushButton:checked {{ background: {tint};"
             f" border: 1px solid {color}; color:#FFFFFF;"
-            " font-weight: 600; }}"
-            "QPushButton:hover { border: 1px solid #4A363C; }"
+            " font-weight: 600; }"
+            "QPushButton:hover { border: 1px solid #4A363C;"
+            " background:#261C20; }"
         )
 
 
@@ -130,30 +133,37 @@ class MapSearchWidget(QWidget):
     # Construction
     # -----------------------------------------------------------------
     def _build(self) -> None:
-        root = QVBoxLayout(self)
+        from . import styles as S
+        from .components import card, field
+        from .icons import icon
 
-        # ---- top row: item type + league + status ----
-        top = QHBoxLayout()
-        top.addWidget(QLabel("Item:"))
+        root = QVBoxLayout(self)
+        root.setContentsMargins(0, 0, 0, 0)
+        root.setSpacing(18)
+
+        # ---- filters card ----
+        fc, fl = card()
+        g = QGridLayout()
+        g.setHorizontalSpacing(18)
+        g.setVerticalSpacing(14)
         self.type_box = QComboBox()
         self.type_box.currentIndexChanged.connect(self._on_type_changed)
-        top.addWidget(self.type_box, 2)
+        g.addWidget(field("Item", self.type_box), 0, 0, 1, 2)
 
-        top.addWidget(QLabel("League:"))
         self.league_edit = QLineEdit(self.cfg.get(_CFG_LEAGUE, "Standard"))
         self.league_edit.editingFinished.connect(self._persist_league)
-        top.addWidget(self.league_edit, 1)
+        g.addWidget(field("League", self.league_edit,
+                          "Exact league name, e.g. <b>Mirage</b>."), 0, 2)
 
-        top.addWidget(QLabel("Status:"))
         self.status_box = QComboBox()
         self.status_box.addItems(["online", "onlineleague", "any"])
         self.status_box.setCurrentText(self.cfg.get(_CFG_STATUS, "online"))
         self.status_box.currentTextChanged.connect(
             lambda v: self.cfg.set(_CFG_STATUS, v))
-        top.addWidget(self.status_box, 1)
-        root.addLayout(top)
+        g.addWidget(field("Sellers", self.status_box,
+                          "<b>online</b>: sellers online now. "
+                          "<b>any</b>: include offline sellers."), 0, 3)
 
-        # ---- filter row: rarity / corrupted / min # modifiers ----
         # "# Modifiers" is the trade-site pseudo stat
         # (pseudo.pseudo_number_of_affix_mods). The trade API rejects
         # map_filters.map_num_mods, but this pseudo is accepted and is
@@ -162,95 +172,129 @@ class MapSearchWidget(QWidget):
         # Default values are populated in _apply_dataset_defaults() once
         # the dataset has loaded — we need its .defaults block to know
         # what to preselect.
-        filt = QHBoxLayout()
-        filt.addWidget(QLabel("Rarity:"))
         self.rarity_box = QComboBox()
         for label, value in _RARITY_OPTIONS:
             self.rarity_box.addItem(label, value)
         self.rarity_box.currentIndexChanged.connect(
             lambda _=0: self._persist_filter(
                 _CFG_RARITY, self.rarity_box.currentData()))
-        filt.addWidget(self.rarity_box, 1)
+        g.addWidget(field("Rarity", self.rarity_box), 1, 0)
 
-        filt.addWidget(QLabel("Corrupted:"))
         self.corrupted_box = QComboBox()
         for label, value in _CORRUPTED_OPTIONS:
             self.corrupted_box.addItem(label, value)
         self.corrupted_box.currentIndexChanged.connect(
             lambda _=0: self._persist_filter(
                 _CFG_CORRUPTED, self.corrupted_box.currentData()))
-        filt.addWidget(self.corrupted_box, 1)
+        g.addWidget(field("Corrupted", self.corrupted_box), 1, 1)
 
-        filt.addWidget(QLabel("Min # Mods:"))
         self.min_mods_spin = QSpinBox()
         self.min_mods_spin.setRange(0, 8)          # 0 = off
         self.min_mods_spin.setSpecialValueText("Off")
-        self.min_mods_spin.setToolTip(
-            "Minimum explicit affix count (trade pseudo '# Modifiers'). "
-            "Use 8 for 8-mod corrupted rares; 0 disables the filter.")
         self.min_mods_spin.valueChanged.connect(
             lambda v: self._persist_filter(_CFG_MIN_MODS, int(v)))
-        filt.addWidget(self.min_mods_spin)
-        root.addLayout(filt)
+        g.addWidget(field("Min mods", self.min_mods_spin,
+                          "Fewest mods the map must have. <b>8</b> finds "
+                          "8-mod corrupted rares. <b>Off</b> = any."), 1, 2)
+        for c in range(4):
+            g.setColumnStretch(c, 1)
+        # Combos size to their longest entry by default, which would
+        # push the page wider than a small window.
+        for box in (self.type_box, self.status_box, self.rarity_box,
+                    self.corrupted_box):
+            box.setSizeAdjustPolicy(
+                QComboBox.SizeAdjustPolicy.AdjustToMinimumContentsLengthWithIcon)
+            box.setMinimumContentsLength(6)
+        fl.addLayout(g)
+        root.addWidget(fc)
 
-        # ---- search bar ----
-        search_row = QHBoxLayout()
-        search_row.addWidget(QLabel("Search:"))
+        # ---- mods card ----
         self.search_edit = QLineEdit()
-        self.search_edit.setPlaceholderText(
-            "filter mods by name or tag (e.g. 'reflect', 'curse', 'fire')")
+        self.search_edit.setPlaceholderText("Search mods…")
+        self.search_edit.setClearButtonEnabled(True)
+        self.search_edit.setMinimumWidth(150)
         self.search_edit.textChanged.connect(self._apply_search)
-        search_row.addWidget(self.search_edit, 1)
-        self.clear_btn = QPushButton("Clear Selection")
+        self.clear_btn = QPushButton("Clear")
+        self.clear_btn.setProperty("role", "pill")
+        self.clear_btn.setToolTip("Un-pick every mod.")
         self.clear_btn.clicked.connect(self._clear_selection)
-        search_row.addWidget(self.clear_btn)
-        root.addLayout(search_row)
+        right = QHBoxLayout()
+        right.setSpacing(8)
+        right.addWidget(self.search_edit)
+        right.addWidget(self.clear_btn)
+        mc, ml = card("Mods to avoid", (
+            "Click every mod you <b>don't</b> want. Picked mods turn "
+            "coloured and are left out of the search."),
+            right=right, icon="search")
 
-        # ---- scrollable category grid ----
         self.scroll = QScrollArea()
         self.scroll.setWidgetResizable(True)
+        self.scroll.setFrameShape(QFrame.Shape.NoFrame)
+        self.scroll.setHorizontalScrollBarPolicy(
+            Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
+        self.scroll.setMinimumHeight(220)
         self.scroll_body = QWidget()
         self.scroll_layout = QVBoxLayout(self.scroll_body)
-        self.scroll_layout.setContentsMargins(4, 4, 4, 4)
+        self.scroll_layout.setContentsMargins(0, 0, 6, 0)
+        self.scroll_layout.setSpacing(14)
         self.scroll.setWidget(self.scroll_body)
-        root.addWidget(self.scroll, 1)
+        ml.addWidget(self.scroll, 1)
 
         # ---- presets row ----
         self.preset_row_frame = QFrame()
         self.preset_row = QHBoxLayout(self.preset_row_frame)
         self.preset_row.setContentsMargins(0, 0, 0, 0)
-        root.addWidget(self.preset_row_frame)
+        self.preset_row.setSpacing(8)
+        ml.addWidget(self.preset_row_frame)
+        root.addWidget(mc, 1)
 
-        # ---- selected preview ----
-        self.preview = QLabel("No mods excluded.")
-        self.preview.setWordWrap(True)
-        self.preview.setStyleSheet(
-            "color:#BEB0A4; padding:8px 10px; background:#141012;"
-            " border:1px solid #33262A; border-radius:6px;")
-        root.addWidget(self.preview)
-
-        # ---- action row ----
+        # ---- bottom bar: summary + actions ----
+        bc, bl = card(variant="gilt", padding=16)
         actions = QHBoxLayout()
+        actions.setSpacing(10)
+        self.preview = QLabel("No mods excluded")
+        self.preview.setWordWrap(False)
+        self.preview.setProperty("role", "muted")
+        actions.addWidget(self.preview, 1)
+
+        self.copy_url_btn = QPushButton()
+        self.copy_url_btn.setIcon(icon("copy", S.FG_1))
+        self.copy_url_btn.setToolTip("Copy the search link")
+        self.copy_url_btn.setAccessibleName("Copy link")
+        self.copy_url_btn.clicked.connect(self._copy_url)
+        actions.addWidget(self.copy_url_btn)
+
+        self.copy_json_btn = QPushButton("{ }")
+        self.copy_json_btn.setToolTip("Copy the raw trade query (JSON)")
+        self.copy_json_btn.setAccessibleName("Copy JSON")
+        self.copy_json_btn.clicked.connect(self._copy_json)
+        actions.addWidget(self.copy_json_btn)
+
+        self.open_ext_btn = QPushButton()
+        self.open_ext_btn.setIcon(icon("external", S.FG_1))
+        self.open_ext_btn.setToolTip("Open in your normal browser")
+        self.open_ext_btn.setAccessibleName("Open in my browser")
+        self.open_ext_btn.clicked.connect(lambda: self._open_trade(external=True))
+        actions.addWidget(self.open_ext_btn)
+
         self.open_btn = QPushButton("Open Trade")
         self.open_btn.setProperty("role", "primary")
+        self.open_btn.setProperty("size", "big")
+        self.open_btn.setIcon(icon("globe", "#1A1200"))
+        self.open_btn.setCursor(Qt.CursorShape.PointingHandCursor)
         self.open_btn.setToolTip(
             "Open the pre-filled search on pathofexile.com/trade "
             "(in the Trade Browser window when it is enabled).")
         self.open_btn.clicked.connect(self._open_trade)
         actions.addWidget(self.open_btn)
+        bl.addLayout(actions)
+        self.action_bar = bc
+        root.addWidget(bc)
 
-        self.open_ext_btn = QPushButton("Open in my browser")
-        self.open_ext_btn.clicked.connect(lambda: self._open_trade(external=True))
-        actions.addWidget(self.open_ext_btn)
-
-        self.copy_url_btn = QPushButton("Copy URL")
-        self.copy_url_btn.clicked.connect(self._copy_url)
-        actions.addWidget(self.copy_url_btn)
-
-        self.copy_json_btn = QPushButton("Copy JSON")
-        self.copy_json_btn.clicked.connect(self._copy_json)
-        actions.addWidget(self.copy_json_btn)
-        root.addLayout(actions)
+    def footer(self) -> QWidget:
+        """The summary + Open Trade bar; MainWindow pins it to the page
+        bottom so it stays visible while the mod list scrolls."""
+        return self.action_bar
 
     # -----------------------------------------------------------------
     # Dataset loading / rendering
@@ -299,30 +343,25 @@ class MapSearchWidget(QWidget):
             section = QFrame()
             sec_v = QVBoxLayout(section)
             sec_v.setContentsMargins(0, 0, 0, 0)
+            sec_v.setSpacing(8)
 
-            # Left-edge color bar instead of a full-width banner — keeps
-            # the category tint visible at a glance without screaming
-            # over every mod chip inside the section.
-            header = QLabel(cat.name)
+            # A coloured dot + name keeps the category tint visible at a
+            # glance without shouting over the chips inside it.
+            header = QLabel(
+                f"<span style='color:{cat.color}; font-size:16px'>●</span>"
+                f"&nbsp; {cat.name}")
             header.setStyleSheet(
-                f"color:#EFE6DA; padding:6px 10px; font-weight:600;"
-                f" font-size:14px;"
-                f" border-left: 3px solid {cat.color};"
-                f" background: rgba(255,255,255,0.02);")
+                "color:#EFE6DA; font-weight:600; font-size:14px;")
             sec_v.addWidget(header)
 
+            from .components import FlowLayout
             grid_host = QWidget()
-            grid = QGridLayout(grid_host)
-            grid.setContentsMargins(0, 4, 0, 4)
-            grid.setHorizontalSpacing(6)
-            grid.setVerticalSpacing(4)
+            flow = FlowLayout(grid_host, spacing=8)
 
-            mods = self.dataset.mods_in_category(cat.id)
-            cols = 3
-            for i, m in enumerate(mods):
+            for m in self.dataset.mods_in_category(cat.id):
                 btn = _ModButton(m.id, m.name, cat.color)
                 btn.toggled.connect(self._on_mod_toggled)
-                grid.addWidget(btn, i // cols, i % cols)
+                flow.addWidget(btn)
                 self._buttons[m.id] = btn
             sec_v.addWidget(grid_host)
 
@@ -346,13 +385,19 @@ class MapSearchWidget(QWidget):
             if w is not None:
                 w.deleteLater()
 
-        self.preset_row.addWidget(QLabel("Presets:"))
+        lab = QLabel("Presets")
+        lab.setObjectName("FieldLabel")
+        self.preset_row.addWidget(lab)
+        from .components import HelpBadge
+        self.preset_row.addWidget(HelpBadge(
+            "Saved sets of mods. Click to apply, right-click to delete."))
 
         # User-defined presets (stored in cfg).
         for idx, p in enumerate(self._user_presets()):
             name = str(p.get("name") or "unnamed")
             excluded = list(p.get("excluded") or [])
             b = QPushButton(name)
+            b.setProperty("role", "pill")
             b.setToolTip(
                 f"Apply user preset '{name}' ({len(excluded)} mod(s)). "
                 "Right-click to delete.")
@@ -366,6 +411,7 @@ class MapSearchWidget(QWidget):
         # Any legacy YAML presets — still honoured if present.
         for p in self.dataset.presets:
             b = QPushButton(p.name)
+            b.setProperty("role", "pill")
             if p.description:
                 b.setToolTip(p.description + " (from map_mods.yaml)")
             b.clicked.connect(lambda _checked=False, pid=p.id:
@@ -373,7 +419,8 @@ class MapSearchWidget(QWidget):
             self.preset_row.addWidget(b)
 
         # Save-current-selection button.
-        save = QPushButton("Save Preset…")
+        save = QPushButton("+ Save")
+        save.setProperty("role", "pill")
         save.setToolTip(
             "Save the current exclusion set as a named preset (stored "
             "in your user config).")
@@ -501,8 +548,8 @@ class MapSearchWidget(QWidget):
             return
         ids = self._selected_ids()
         if not ids:
-            self.preview.setText("No mods excluded. Search will return "
-                                 "every listing for the selected item type.")
+            self.preview.setText("No mods excluded")
+            self.preview.setToolTip("")
             return
         # Show the nice name, grouped by category.
         by_cat: dict[str, list[str]] = {}
@@ -511,12 +558,16 @@ class MapSearchWidget(QWidget):
             if m is None:
                 continue
             by_cat.setdefault(m.category, []).append(m.name)
-        parts: list[str] = [f"Excluding {len(ids)} mod(s):"]
+        parts: list[str] = []
         for cat in self.dataset.categories:
             names = by_cat.get(cat.id)
             if names:
-                parts.append(f"  • {cat.name}: " + ", ".join(names))
-        self.preview.setText("\n".join(parts))
+                parts.append(f"<b>{cat.name}</b>: " + ", ".join(names))
+        n = len(ids)
+        self.preview.setText(
+            f"<b style='color:#EFE6DA'>{n}</b> mod{'s' if n != 1 else ''} "
+            f"excluded")
+        self.preview.setToolTip("<br>".join(parts))
 
     def _restore_selection(self) -> None:
         saved = self.cfg.get(_CFG_EXCLUDED) or []

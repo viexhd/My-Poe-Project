@@ -164,6 +164,24 @@ class UiTests(unittest.TestCase):
             self.assertTrue([t for t in labels if "overlay" in t.lower()], labels)
         win.close()
 
+    def test_sidebar_reaches_every_page(self) -> None:
+        win = self._window()
+        self.assertEqual(win.pages.count(), len(win._nav_buttons))
+        for i in range(win.pages.count()):
+            win._nav_select(i)
+            self.assertEqual(win.pages.currentIndex(), i)
+            self.assertTrue(win._nav_buttons[i].isChecked())
+        win.close()
+
+    def test_every_page_has_help_badges(self) -> None:
+        from poe_qol.ui.components import HelpBadge
+        win = self._window()
+        for i in range(win.pages.count()):
+            badges = win.pages.widget(i).findChildren(HelpBadge)
+            self.assertTrue(badges, f"page {i} has no '?' help")
+            self.assertTrue(all(b.help_text for b in badges))
+        win.close()
+
     def test_about_shows_disclaimer(self) -> None:
         win = self._window()
         self.assertIn(DISCLAIMER, win.about_text())

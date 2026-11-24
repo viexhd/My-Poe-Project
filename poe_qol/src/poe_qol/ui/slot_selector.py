@@ -26,17 +26,22 @@ from pathlib import Path
 from typing import Callable, Optional
 
 import yaml
-from PySide6.QtCore import QRectF, Qt, QTimer
+from PySide6.QtCore import QEvent, QRectF, Qt, QTimer
 from PySide6.QtGui import QColor, QPainter
 from PySide6.QtWidgets import (
-    QComboBox, QGridLayout, QHBoxLayout, QInputDialog, QLabel,
-    QMessageBox, QPushButton, QToolButton, QVBoxLayout, QWidget,
+    QBoxLayout, QComboBox, QGridLayout, QHBoxLayout, QInputDialog, QLayout,
+    QMessageBox, QPushButton, QSizePolicy, QToolButton, QWidget,
 )
 
 from ..core.config import ConfigStore
 
 
-CELL_SIZE_PX = 28   # button size in the selector (purely cosmetic)
+CELL_SIZE_PX = 40   # starting cell size; cells then scale to the card
+CELL_MIN_PX = 18
+CELL_MAX_PX = 64
+CELL_GAP_PX = 6
+SIDE_W_PX = 280     # width of the stats/overlay/profile column
+NARROW_PX = 760     # below this page width the side column moves under the grid
 
 
 class SlotSelector(QWidget):
@@ -61,85 +66,173 @@ class SlotSelector(QWidget):
 
     # ---- construction ----
     def _build(self) -> None:
-        v = QVBoxLayout(self)
+        from . import styles as S
+        from .components import StatCard, card
+        from .icons import icon
+
+        # Side by side when there is room; the side cards drop below the
+        # grid in a narrow window (see resizeEvent).
+        root = QBoxLayout(QBoxLayout.Direction.LeftToRight, self)
+        root.setContentsMargins(0, 0, 0, 0)
+        root.setSpacing(18)
+        self._root = root
 
         rows = self.cfg.get(self._k("grid", "rows"), 5)
         cols = self.cfg.get(self._k("grid", "cols"), 12)
 
-        header = QLabel(f"{self.title} slots  ·  {rows} × {cols}")
-        header.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        header.setProperty("role", "section")
-        v.addWidget(header)
+        # ---- left: the grid ----
+        bulk = QHBoxLayout()
+        bulk.setSpacing(8)
+        for label, fn in (("All", self._select_all),
+                          ("None", self._clear),
+                          ("Invert", self._invert)):
+            btn = QPushButton(label)
+            btn.setProperty("role", "pill")
+            btn.setCursor(Qt.CursorShape.PointingHandCursor)
+            btn.clicked.connect(fn)
+            bulk.addWidget(btn)
+        grid_card, gv = card(
+            f"{rows} × {cols} slots",
+            "Click slots to pick them. Green = highlighted in game.",
+            right=bulk, icon="inventory")
 
+        # The grid widget takes whatever space the card has and the cells
+        # are resized to fit it (see _fit_cells), so the grid never clips
+        # and never stops the window from shrinking.
         grid_w = QWidget()
+        grid_w.setSizePolicy(QSizePolicy.Policy.Ignored,
+                             QSizePolicy.Policy.Ignored)
         grid = QGridLayout(grid_w)
-        grid.setSpacing(2)
+        grid.setSpacing(CELL_GAP_PX)
         grid.setContentsMargins(0, 0, 0, 0)
+        grid.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        grid.setSizeConstraint(QLayout.SizeConstraint.SetNoConstraint)
+        grid_w.setMinimumHeight(rows * 26)
+        self._grid_w = grid_w
+        self._grid_dims = (rows, cols)
+        grid_w.installEventFilter(self)
         selected = {tuple(s) for s in
                     (self.cfg.get(self._k("selected_slots")) or [])}
         for r in range(rows):
             for c in range(cols):
                 b = QToolButton()
+                b.setObjectName("SlotCell")
                 b.setCheckable(True)
                 b.setChecked((r, c) in selected)
                 b.setFixedSize(CELL_SIZE_PX, CELL_SIZE_PX)
-                b.setToolTip(f"row {r}, col {c}")
+                b.setCursor(Qt.CursorShape.PointingHandCursor)
+                b.setToolTip(f"row {r + 1}, column {c + 1}")
                 b.toggled.connect(lambda _v, rr=r, cc=c: self._on_toggle(rr, cc))
                 self._style_button(b)
                 grid.addWidget(b, r, c)
                 self._buttons[(r, c)] = b
-        v.addWidget(grid_w)
+        gv.addWidget(grid_w, 1)
+        root.addWidget(grid_card, 1)
 
-        # Bulk row
-        ctl = QHBoxLayout()
-        for label, fn in (("All", self._select_all),
-                          ("None", self._clear),
-                          ("Invert", self._invert)):
-            btn = QPushButton(label)
-            btn.clicked.connect(fn)
-            ctl.addWidget(btn)
-        v.addLayout(ctl)
+        # ---- right: stats + actions ----
+        side = QBoxLayout(QBoxLayout.Direction.TopToBottom)
+        side.setContentsMargins(0, 0, 0, 0)
+        side.setSpacing(18)
+        self._side = side
+        self._summary_card = StatCard(
+            "Selected", help="How many slots will be highlighted.",
+            icon="select")
+        self._summary = self._summary_card.value
+        side.addWidget(self._summary_card)
 
-        # Profile row
-        prof = QHBoxLayout()
+        ov_card, ov = card("Overlay", (
+            "Draws green boxes over the chosen slots in game. "
+            "<b>Highlight only</b>: you Ctrl-click them yourself; nothing "
+            "is clicked for you. Needs windowed or windowed-fullscreen."),
+            icon="eye")
+        self.overlay_btn = QPushButton("Show overlay")
+        self.overlay_btn.setCheckable(True)
+        self.overlay_btn.setProperty("size", "big")
+        self.overlay_btn.setProperty("role", "primary")
+        self.overlay_btn.setIcon(icon("eye", "#1A1200"))
+        self.overlay_btn.setCursor(Qt.CursorShape.PointingHandCursor)
+        self.overlay_btn.toggled.connect(self._on_overlay_toggle)
+        ov.addWidget(self.overlay_btn)
+
+        self.calibrate_btn = QPushButton("Calibrate…")
+        self.calibrate_btn.setIcon(icon("target", S.FG_1))
+        self.calibrate_btn.setToolTip(
+            "Point at three slots with the cursor so the overlay lines up "
+            "with your game window.")
+        self.calibrate_btn.clicked.connect(self._on_calibrate)
+        cal_row = QHBoxLayout()
+        cal_row.addWidget(self.calibrate_btn, 1)
+        from .components import HelpBadge
+        cal_row.addWidget(HelpBadge(
+            "Do this once (and after changing resolution): hover the "
+            "top-left slot, the one to its right and the one below, "
+            "pressing the hotkey on each."))
+        ov.addLayout(cal_row)
+        side.addWidget(ov_card)
+
+        pr_card, pr = card("Profiles", (
+            "Save the current selection under a name and switch between "
+            "saved selections."), icon="folder")
         self.prof_combo = QComboBox()
         self.prof_combo.setEditable(False)
         self._refresh_profiles()
         self.prof_combo.currentTextChanged.connect(self._on_profile_changed)
-        prof.addWidget(QLabel("Profile:"))
-        prof.addWidget(self.prof_combo, 1)
+        pr.addWidget(self.prof_combo)
+        prow = QHBoxLayout()
         for label, fn in (("Save", self._save_profile_prompt),
                           ("Delete", self._delete_profile)):
             btn = QPushButton(label)
             btn.clicked.connect(fn)
-            prof.addWidget(btn)
-        v.addLayout(prof)
+            prow.addWidget(btn, 1)
+        pr.addLayout(prow)
+        side.addWidget(pr_card)
+        side.addStretch(1)
 
-        # Overlay + calibrate row
-        ov = QHBoxLayout()
-        self.overlay_btn = QPushButton("Show overlay")
-        self.overlay_btn.setCheckable(True)
-        self.overlay_btn.toggled.connect(self._on_overlay_toggle)
-        ov.addWidget(self.overlay_btn, 1)
-
-        self.calibrate_btn = QPushButton("Calibrate…")
-        self.calibrate_btn.setToolTip(
-            "Capture top-left / right / down slot positions from the cursor "
-            "and compute origin + cell size automatically.")
-        self.calibrate_btn.clicked.connect(self._on_calibrate)
-        ov.addWidget(self.calibrate_btn, 1)
-        v.addLayout(ov)
-
-        hint = QLabel(
-            "Highlight only: turn on the overlay, then Ctrl-click the "
-            "highlighted slots yourself. Nothing is clicked for you.")
-        hint.setWordWrap(True)
-        hint.setProperty("role", "caption")
-        v.addWidget(hint)
-
-        self._summary = QLabel()
-        v.addWidget(self._summary)
+        side_w = QWidget()
+        side_w.setLayout(side)
+        side_w.setFixedWidth(SIDE_W_PX)
+        self._side_w = side_w
+        self._narrow = False
+        root.addWidget(side_w)
         self._refresh_summary()
+
+    def resizeEvent(self, e) -> None:  # noqa: N802
+        super().resizeEvent(e)
+        narrow = self.width() < NARROW_PX
+        if narrow == self._narrow:
+            return
+        self._narrow = narrow
+        last = self._side.count() - 1            # the trailing stretch
+        if narrow:
+            self._root.setDirection(QBoxLayout.Direction.TopToBottom)
+            self._side.setDirection(QBoxLayout.Direction.LeftToRight)
+            for i in range(last):
+                self._side.setStretch(i, 1)
+            self._side.setStretch(last, 0)
+            self._side_w.setMinimumWidth(0)
+            self._side_w.setMaximumWidth(16777215)
+        else:
+            self._root.setDirection(QBoxLayout.Direction.LeftToRight)
+            self._side.setDirection(QBoxLayout.Direction.TopToBottom)
+            for i in range(last):
+                self._side.setStretch(i, 0)
+            self._side.setStretch(last, 1)
+            self._side_w.setFixedWidth(SIDE_W_PX)
+
+    def eventFilter(self, obj, ev) -> bool:  # noqa: N802
+        if obj is getattr(self, "_grid_w", None) and ev.type() == QEvent.Type.Resize:
+            self._fit_cells()
+        return super().eventFilter(obj, ev)
+
+    def _fit_cells(self) -> None:
+        rows, cols = self._grid_dims
+        w, h = self._grid_w.width(), self._grid_w.height()
+        size = min((w - CELL_GAP_PX * (cols - 1)) // cols,
+                   (h - CELL_GAP_PX * (rows - 1)) // rows)
+        size = max(CELL_MIN_PX, min(CELL_MAX_PX, size))
+        for b in self._buttons.values():
+            if b.width() != size:
+                b.setFixedSize(size, size)
 
     def _style_button(self, b: QToolButton) -> None:
         # Styling lives in ui/styles.py (QToolButton rules). Kept as a
@@ -194,8 +287,9 @@ class SlotSelector(QWidget):
     def _refresh_summary(self) -> None:
         n = len(self._current_selected())
         total = len(self._buttons)
-        self._summary.setText(f"{n} / {total} selected"
-                              + ("  (all)" if n == total else ""))
+        self._summary_card.set(f"{n} / {total}",
+                               "all slots" if n == total else
+                               ("none yet" if n == 0 else ""))
 
     # ---- profiles ----
     def _profile_dir(self) -> Path:
@@ -290,11 +384,23 @@ class SlotSelector(QWidget):
             self._overlay.refresh(self._current_selected())
             self._overlay.show()
             self.overlay_btn.setText("Hide overlay")
+            self.overlay_btn.setProperty("role", "")
+            self.overlay_btn.setIcon(_eye(False))
         else:
             if self._overlay:
                 self._overlay.close()
                 self._overlay = None
             self.overlay_btn.setText("Show overlay")
+            self.overlay_btn.setProperty("role", "primary")
+            self.overlay_btn.setIcon(_eye(True))
+        from .styles import repolish
+        repolish(self.overlay_btn)
+
+
+def _eye(primary: bool):
+    from . import styles as S
+    from .icons import icon
+    return icon("eye", "#1A1200" if primary else S.FG_0)
 
 
 class _OverlayWindow(QWidget):

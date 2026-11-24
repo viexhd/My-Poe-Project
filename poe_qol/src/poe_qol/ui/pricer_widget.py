@@ -22,7 +22,7 @@ from typing import Optional
 from PySide6.QtCore import Qt, QThread, QTimer, Signal
 from PySide6.QtGui import QGuiApplication
 from PySide6.QtWidgets import (
-    QAbstractItemView, QCheckBox, QHBoxLayout, QHeaderView, QLabel,
+    QAbstractItemView, QHBoxLayout, QHeaderView, QLabel,
     QLineEdit, QPushButton, QTableWidget, QTableWidgetItem,
     QTextEdit, QVBoxLayout, QWidget,
 )
@@ -77,88 +77,124 @@ class PricerWidget(QWidget):
         self._wire_clipboard()
 
     # ---- build ----
-    def _build(self) -> None:
-        v = QVBoxLayout(self)
+    def header_actions(self) -> list[QWidget]:
+        return [self.repriced_btn]
 
-        # Toolbar: league, have, auto-toggle, manual re-price.
-        top = QHBoxLayout()
-        top.addWidget(QLabel("League:"))
+    def _build(self) -> None:
+        from . import styles as S
+        from .components import HelpBadge, StatCard, Switch, caption, card, field
+        from .icons import icon
+
+        v = QVBoxLayout(self)
+        v.setContentsMargins(0, 0, 0, 0)
+        v.setSpacing(18)
+
+        self.repriced_btn = QPushButton("Price clipboard")
+        self.repriced_btn.setProperty("role", "primary")
+        self.repriced_btn.setIcon(icon("clipboard", "#1A1200"))
+        self.repriced_btn.setCursor(Qt.CursorShape.PointingHandCursor)
+        self.repriced_btn.setToolTip("Price whatever is on the clipboard now.")
+        self.repriced_btn.clicked.connect(self._reprice_manual)
+
+        # ---- settings ----
+        sc, sl = card()
+        row = QHBoxLayout()
+        row.setSpacing(18)
         default_league = (self.cfg.get(_CFG_LEAGUE)
                           or self.cfg.get("trade.league", "Standard"))
         self.league_edit = QLineEdit(default_league)
-        self.league_edit.setMaximumWidth(160)
         self.league_edit.editingFinished.connect(self._persist_prefs)
-        top.addWidget(self.league_edit)
-
-        top.addSpacing(12)
-        top.addWidget(QLabel("Denominate in:"))
+        row.addWidget(field("League", self.league_edit,
+                            "Exact league name, e.g. <b>Mirage</b>."), 2)
         self.have_edit = QLineEdit(self.cfg.get(_CFG_HAVE, "chaos"))
-        self.have_edit.setMaximumWidth(100)
-        self.have_edit.setToolTip(
-            "Trade slug for the currency you want prices in. "
-            "Common: chaos, divine, exalted.")
         self.have_edit.editingFinished.connect(self._persist_prefs)
-        top.addWidget(self.have_edit)
-
-        self.auto_chk = QCheckBox("Auto-price on copy")
+        row.addWidget(field("Prices in", self.have_edit,
+                            "Currency to show prices in: <b>chaos</b>, "
+                            "<b>divine</b> or <b>exalted</b>."), 1)
+        self.auto_chk = Switch("Auto-price")
         self.auto_chk.setChecked(bool(self.cfg.get(_CFG_AUTO, True)))
-        self.auto_chk.setToolTip(
-            "When on, every Ctrl+C on an item queries the trade API. "
-            "Turn off to browse/compare without spamming requests.")
         self.auto_chk.stateChanged.connect(self._persist_prefs)
-        top.addWidget(self.auto_chk)
+        aw = QWidget()
+        al = QVBoxLayout(aw)
+        al.setContentsMargins(0, 22, 0, 0)
+        ah = QHBoxLayout()
+        ah.addWidget(self.auto_chk)
+        ah.addWidget(HelpBadge(
+            "Price every item you Ctrl+C in game. Turn off to copy items "
+            "without sending a trade-site search each time."))
+        ah.addStretch(1)
+        al.addLayout(ah)
+        row.addWidget(aw, 1)
+        sl.addLayout(row)
+        v.addWidget(sc)
 
-        top.addStretch(1)
-        self.repriced_btn = QPushButton("Price clipboard")
-        self.repriced_btn.setProperty("role", "primary")
-        self.repriced_btn.clicked.connect(self._reprice_manual)
-        top.addWidget(self.repriced_btn)
-        v.addLayout(top)
+        # ---- stats ----
+        self.item_card = StatCard("Item", "—", sub="Ctrl+C an item in game", help=(
+            "The last item you copied in game."), icon="tag")
+        self.item_card.value.setStyleSheet("font-size:22px;")
+        self.item_card.value.setWordWrap(True)
+        self.summary = self.item_card.sub
+        self.floor_card = StatCard("Lowest", help=(
+            "The lowest listed price."), icon="wealth")
+        self.real_card = StatCard("Real", help=(
+            "The cheapest price after skipping stale listings (old, "
+            "likely unsold bait). Usually the price to beat."),
+            icon="target", accent=S.ACCENT)
+        self.stale_card = StatCard("Stale", help=(
+            "Top listings that look abandoned: listed long ago and never "
+            "repriced."), icon="info")
+        from .components import CardRow
+        v.addWidget(CardRow([self.item_card, self.floor_card,
+                             self.real_card, self.stale_card], min_w=170))
 
-        # Item summary card.
-        self.summary = QLabel("Ctrl+C an item in Path of Exile to price it.")
-        self.summary.setWordWrap(True)
-        self.summary.setStyleSheet(
-            "padding:10px; background:#141012; border:1px solid #33262A;"
-            " border-radius:6px; color:#EFE6DA;")
-        v.addWidget(self.summary)
-
-        # Price card.
+        # ---- listings ----
+        self.raw_btn = QPushButton("Raw text")
+        self.raw_btn.setProperty("role", "pill")
+        self.raw_btn.setCheckable(True)
+        lc, ll = card("Listings", "The cheapest matching listings on "
+                      "pathofexile.com/trade.", icon="search",
+                      right=self.raw_btn)
         self.price_card = QLabel("")
         self.price_card.setWordWrap(True)
         self.price_card.setTextFormat(Qt.TextFormat.RichText)
-        self.price_card.setStyleSheet(
-            "padding:10px; background:#1C1518; border:1px solid #33262A;"
-            " border-radius:6px;")
-        v.addWidget(self.price_card)
+        self.price_card.setOpenExternalLinks(True)
+        self.price_card.setVisible(False)
+        ll.addWidget(self.price_card)
 
-        # Listings table.
         self.table = QTableWidget(0, len(_LISTING_COLS))
         self.table.setHorizontalHeaderLabels(_LISTING_COLS)
         self.table.verticalHeader().setVisible(False)
+        self.table.verticalHeader().setDefaultSectionSize(36)
+        self.table.setShowGrid(False)
         self.table.setEditTriggers(QAbstractItemView.EditTrigger.NoEditTriggers)
         self.table.setSelectionBehavior(
             QAbstractItemView.SelectionBehavior.SelectRows)
         self.table.setAlternatingRowColors(True)
+        self.table.setMinimumHeight(200)
         h = self.table.horizontalHeader()
         h.setSectionResizeMode(0, QHeaderView.ResizeMode.ResizeToContents)
         h.setSectionResizeMode(1, QHeaderView.ResizeMode.ResizeToContents)
         h.setSectionResizeMode(2, QHeaderView.ResizeMode.Stretch)
         h.setSectionResizeMode(3, QHeaderView.ResizeMode.ResizeToContents)
         h.setSectionResizeMode(4, QHeaderView.ResizeMode.ResizeToContents)
-        v.addWidget(self.table, 1)
+        ll.addWidget(self.table, 1)
 
-        # Raw item box (collapsible feel via small height).
         self.raw = QTextEdit()
         self.raw.setReadOnly(True)
-        self.raw.setPlaceholderText("Raw clipboard text will appear here.")
-        self.raw.setMaximumHeight(120)
-        v.addWidget(self.raw)
+        self.raw.setPlaceholderText("Copied text appears here.")
+        self.raw.setMaximumHeight(140)
+        self.raw.setVisible(False)
+        self.raw_btn.toggled.connect(self.raw.setVisible)
+        ll.addWidget(self.raw)
 
-        # Status line.
-        self.status = QLabel("Idle.")
-        self.status.setProperty("role", "caption")
-        v.addWidget(self.status)
+        self.status = caption("Waiting for Ctrl+C.")
+        ll.addWidget(self.status)
+        v.addWidget(lc, 1)
+        self._reset_stats()
+
+    def _reset_stats(self) -> None:
+        for c in (self.floor_card, self.real_card, self.stale_card):
+            c.set("—", "")
 
     # ---- clipboard plumbing ----
     def _wire_clipboard(self) -> None:
@@ -185,7 +221,7 @@ class PricerWidget(QWidget):
         cb = QGuiApplication.clipboard()
         text = cb.text() if cb else ""
         if not text:
-            self.status.setText("Clipboard is empty.")
+            self.status.setText("Clipboard is empty. Ctrl+C an item first.")
             return
         # Bypass the "same text" guard so the user can force a refetch.
         self._last_text = text
@@ -196,8 +232,10 @@ class PricerWidget(QWidget):
         self.raw.setPlainText(text)
         item = parse_item(text)
         if item is None:
-            self.summary.setText("Clipboard doesn't look like a PoE item.")
+            self.item_card.set("Not an item", "Copy an item in game with Ctrl+C.")
             self.price_card.setText("")
+            self.price_card.setVisible(False)
+            self._reset_stats()
             self.table.setRowCount(0)
             self.status.setText("Idle.")
             return
@@ -230,17 +268,19 @@ class PricerWidget(QWidget):
 
     def _on_failed(self, item: ParsedItem, msg: str) -> None:
         self.price_card.setText(
-            f"<b>Price lookup failed.</b><br>{_html_escape(msg)}")
+            f"<span style='color:#E5484D'><b>Price lookup failed.</b> "
+            f"{_html_escape(msg)}</span>")
+        self.price_card.setVisible(True)
         self.table.setRowCount(0)
+        self._reset_stats()
         self.status.setText("Failed.")
 
     # ---- render ----
     def _render_summary(self, item: ParsedItem) -> None:
-        parts = [f"<b>{_html_escape(item.name)}</b>"]
+        meta: list[str] = []
         if item.base_type and item.base_type != item.name:
-            parts.append(f"<span style='color:#BEB0A4'>"
-                         f"{_html_escape(item.base_type)}</span>")
-        meta: list[str] = [item.rarity]
+            meta.append(item.base_type)
+        meta.append(item.rarity)
         if item.item_class:
             meta.append(item.item_class)
         if item.map_tier is not None:
@@ -252,37 +292,39 @@ class PricerWidget(QWidget):
         if item.stack_size:
             meta.append(f"Stack {item.stack_size[0]}/{item.stack_size[1]}")
         if item.corrupted:
-            meta.append("<span style='color:#D9544A'>Corrupted</span>")
-        parts.append("<span style='color:#BEB0A4'>"
-                     + " · ".join(_html_escape(m) for m in meta) + "</span>")
-        self.summary.setText("<br>".join(parts))
+            meta.append("Corrupted")
+        self.item_card.set(item.name, " · ".join(m for m in meta if m))
+        self._reset_stats()
 
     def _render_result(self, item: ParsedItem, r: PriceResult) -> None:
-        lines: list[str] = []
-        if r.floor is not None:
-            lines.append(
-                f"<b>Floor:</b> {_fmt_price(r.floor, r.floor_currency)}")
-        if r.effective_floor is not None and r.effective_floor != r.floor:
-            lines.append(
-                f"<b>Effective floor (ignoring stale):</b> "
-                f"<span style='color:#D9B25A'>"
-                f"{_fmt_price(r.effective_floor, r.floor_currency)}</span>")
-        if r.stale_count:
+        from . import styles as S
+        self.floor_card.set(
+            _fmt_price(r.floor, r.floor_currency) if r.floor is not None
+            else "—", "")
+        eff = r.effective_floor if r.effective_floor is not None else r.floor
+        self.real_card.set(
+            _fmt_price(eff, r.floor_currency) if eff is not None else "—",
+            "ignoring stale" if (r.effective_floor is not None
+                                 and r.effective_floor != r.floor) else "")
+        if r.listings:
             frac = r.stale_fraction * 100
-            lines.append(
-                f"<span style='color:#D9544A'>{r.stale_count} of "
-                f"{len(r.listings)} top listings look stale "
-                f"({frac:.0f}%).</span>")
+            self.stale_card.set(
+                f"{r.stale_count} / {len(r.listings)}",
+                f"{frac:.0f}% of top listings",
+                color=S.DANGER if r.stale_count else S.SUCCESS)
+        else:
+            self.stale_card.set("—", "no listings", color="")
+
+        lines: list[str] = []
         if r.search_url:
             lines.append(
-                f"<a href='{r.search_url}' style='color:#4FA7E3'>"
-                f"Open on pathofexile.com/trade →</a>")
+                f"<a href='{r.search_url}' style='color:#D9B25A'>"
+                f"Open this search on pathofexile.com/trade →</a>")
         for n in r.notes:
             lines.append(f"<span style='color:#BEB0A4'>· "
                          f"{_html_escape(n)}</span>")
-        self.price_card.setText("<br>".join(lines) if lines
-                                else "No pricing data.")
-        self.price_card.setOpenExternalLinks(True)
+        self.price_card.setText("<br>".join(lines))
+        self.price_card.setVisible(bool(lines))
 
         # Populate the table.
         self.table.setRowCount(0)
