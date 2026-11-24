@@ -28,6 +28,7 @@ from PySide6.QtWidgets import (
 )
 
 from ..core.config import ConfigStore
+from .text import capitalise
 from ..pricer import ParsedItem, PriceResult, TradeClient, parse_item, price_item
 
 log = logging.getLogger("poe_qol.ui.pricer")
@@ -89,7 +90,7 @@ class PricerWidget(QWidget):
         v.setContentsMargins(0, 0, 0, 0)
         v.setSpacing(18)
 
-        self.repriced_btn = QPushButton("Price clipboard")
+        self.repriced_btn = QPushButton("Price Clipboard")
         self.repriced_btn.setProperty("role", "primary")
         self.repriced_btn.setIcon(icon("clipboard", "#1A1200"))
         self.repriced_btn.setCursor(Qt.CursorShape.PointingHandCursor)
@@ -100,18 +101,17 @@ class PricerWidget(QWidget):
         sc, sl = card()
         row = QHBoxLayout()
         row.setSpacing(18)
-        default_league = (self.cfg.get(_CFG_LEAGUE)
-                          or self.cfg.get("trade.league", "Standard"))
-        self.league_edit = QLineEdit(default_league)
-        self.league_edit.editingFinished.connect(self._persist_prefs)
-        row.addWidget(field("League", self.league_edit,
-                            "Exact league name, e.g. <b>Mirage</b>."), 2)
+        from .league import LeagueBox
+        self.league_box = LeagueBox(self.cfg, _CFG_LEAGUE)
+        row.addWidget(field("League", self.league_box,
+                            "<b>Latest</b> always follows the newest "
+                            "challenge league."), 2)
         self.have_edit = QLineEdit(self.cfg.get(_CFG_HAVE, "chaos"))
         self.have_edit.editingFinished.connect(self._persist_prefs)
-        row.addWidget(field("Prices in", self.have_edit,
+        row.addWidget(field("Prices In", self.have_edit,
                             "Currency to show prices in: <b>chaos</b>, "
                             "<b>divine</b> or <b>exalted</b>."), 1)
-        self.auto_chk = Switch("Auto-price")
+        self.auto_chk = Switch("Auto-Price")
         self.auto_chk.setChecked(bool(self.cfg.get(_CFG_AUTO, True)))
         self.auto_chk.stateChanged.connect(self._persist_prefs)
         aw = QWidget()
@@ -129,7 +129,7 @@ class PricerWidget(QWidget):
         v.addWidget(sc)
 
         # ---- stats ----
-        self.item_card = StatCard("Item", "—", sub="Ctrl+C an item in game", help=(
+        self.item_card = StatCard("Item", "—", sub="Ctrl+C An Item In Game", help=(
             "The last item you copied in game."), icon="tag")
         self.item_card.value.setStyleSheet("font-size:22px;")
         self.item_card.value.setWordWrap(True)
@@ -148,7 +148,7 @@ class PricerWidget(QWidget):
                              self.real_card, self.stale_card], min_w=170))
 
         # ---- listings ----
-        self.raw_btn = QPushButton("Raw text")
+        self.raw_btn = QPushButton("Raw Text")
         self.raw_btn.setProperty("role", "pill")
         self.raw_btn.setCheckable(True)
         lc, ll = card("Listings", "The cheapest matching listings on "
@@ -181,13 +181,13 @@ class PricerWidget(QWidget):
 
         self.raw = QTextEdit()
         self.raw.setReadOnly(True)
-        self.raw.setPlaceholderText("Copied text appears here.")
+        self.raw.setPlaceholderText("Copied Text Appears Here")
         self.raw.setMaximumHeight(140)
         self.raw.setVisible(False)
         self.raw_btn.toggled.connect(self.raw.setVisible)
         ll.addWidget(self.raw)
 
-        self.status = caption("Waiting for Ctrl+C.")
+        self.status = caption("Waiting For Ctrl+C")
         ll.addWidget(self.status)
         v.addWidget(lc, 1)
         self._reset_stats()
@@ -221,7 +221,7 @@ class PricerWidget(QWidget):
         cb = QGuiApplication.clipboard()
         text = cb.text() if cb else ""
         if not text:
-            self.status.setText("Clipboard is empty. Ctrl+C an item first.")
+            self.status.setText("Clipboard Is Empty. Ctrl+C An Item First.")
             return
         # Bypass the "same text" guard so the user can force a refetch.
         self._last_text = text
@@ -232,12 +232,12 @@ class PricerWidget(QWidget):
         self.raw.setPlainText(text)
         item = parse_item(text)
         if item is None:
-            self.item_card.set("Not an item", "Copy an item in game with Ctrl+C.")
+            self.item_card.set("Not An Item", "Copy An Item In Game With Ctrl+C")
             self.price_card.setText("")
             self.price_card.setVisible(False)
             self._reset_stats()
             self.table.setRowCount(0)
-            self.status.setText("Idle.")
+            self.status.setText("Idle")
             return
         self._render_summary(item)
         if self._worker and self._worker.isRunning():
@@ -246,13 +246,13 @@ class PricerWidget(QWidget):
             # trade-API request only to fire another is the fastest way
             # to get rate-limited.
             self.status.setText(
-                f"Fetching (queued behind previous request for "
+                f"Fetching (Queued Behind The Request For "
                 f"{self._last_query_label})…")
             return
-        league = self.league_edit.text().strip() or "Standard"
+        league = self.league_box.league()
         have = self.have_edit.text().strip() or "chaos"
         self._last_query_label = item.name
-        self.status.setText(f"Fetching prices for {item.name}…")
+        self.status.setText(f"Fetching Prices For {item.name}…")
         self.repriced_btn.setEnabled(False)
         self._worker = _PriceWorker(item, league, have, self._client)
         self._worker.done.connect(self._on_done)
@@ -264,16 +264,16 @@ class PricerWidget(QWidget):
     def _on_done(self, item: ParsedItem, result: PriceResult) -> None:
         self._render_result(item, result)
         self.status.setText(
-            f"{result.total} total listings  ·  showing {len(result.listings)}")
+            f"{result.total} Total Listings  ·  Showing {len(result.listings)}")
 
     def _on_failed(self, item: ParsedItem, msg: str) -> None:
         self.price_card.setText(
-            f"<span style='color:#E5484D'><b>Price lookup failed.</b> "
-            f"{_html_escape(msg)}</span>")
+            f"<span style='color:#E5484D'><b>Price Lookup Failed.</b> "
+            f"{_html_escape(capitalise(msg))}</span>")
         self.price_card.setVisible(True)
         self.table.setRowCount(0)
         self._reset_stats()
-        self.status.setText("Failed.")
+        self.status.setText("Failed")
 
     # ---- render ----
     def _render_summary(self, item: ParsedItem) -> None:
@@ -293,7 +293,7 @@ class PricerWidget(QWidget):
             meta.append(f"Stack {item.stack_size[0]}/{item.stack_size[1]}")
         if item.corrupted:
             meta.append("Corrupted")
-        self.item_card.set(item.name, " · ".join(m for m in meta if m))
+        self.item_card.set(item.name, capitalise(" · ".join(m for m in meta if m)))
         self._reset_stats()
 
     def _render_result(self, item: ParsedItem, r: PriceResult) -> None:
@@ -304,25 +304,25 @@ class PricerWidget(QWidget):
         eff = r.effective_floor if r.effective_floor is not None else r.floor
         self.real_card.set(
             _fmt_price(eff, r.floor_currency) if eff is not None else "—",
-            "ignoring stale" if (r.effective_floor is not None
+            "Ignoring Stale" if (r.effective_floor is not None
                                  and r.effective_floor != r.floor) else "")
         if r.listings:
             frac = r.stale_fraction * 100
             self.stale_card.set(
                 f"{r.stale_count} / {len(r.listings)}",
-                f"{frac:.0f}% of top listings",
+                f"{frac:.0f}% Of Top Listings",
                 color=S.DANGER if r.stale_count else S.SUCCESS)
         else:
-            self.stale_card.set("—", "no listings", color="")
+            self.stale_card.set("—", "No Listings", color="")
 
         lines: list[str] = []
         if r.search_url:
             lines.append(
                 f"<a href='{r.search_url}' style='color:#D9B25A'>"
-                f"Open this search on pathofexile.com/trade →</a>")
+                f"Open This Search On The Trade Site →</a>")
         for n in r.notes:
             lines.append(f"<span style='color:#BEB0A4'>· "
-                         f"{_html_escape(n)}</span>")
+                         f"{_html_escape(capitalise(n))}</span>")
         self.price_card.setText("<br>".join(lines))
         self.price_card.setVisible(bool(lines))
 
@@ -339,17 +339,16 @@ class PricerWidget(QWidget):
             self.table.setItem(row, 2, QTableWidgetItem(lst.seller))
             self.table.setItem(row, 3,
                                QTableWidgetItem(_fmt_indexed(lst.indexed)))
-            status = ("stale" if lst.stale
-                      else ("online" if lst.online else "offline"))
+            status = ("Stale" if lst.stale
+                      else ("Online" if lst.online else "Offline"))
             self.table.setItem(row, 4, QTableWidgetItem(status))
 
     # ---- persistence ----
     def _persist_prefs(self) -> None:
-        self.cfg.set(_CFG_LEAGUE, self.league_edit.text().strip())
         self.cfg.set(_CFG_HAVE, self.have_edit.text().strip())
         self.cfg.set(_CFG_AUTO, bool(self.auto_chk.isChecked()))
         try:
-            self.cfg.save_user_overrides([_CFG_LEAGUE, _CFG_HAVE, _CFG_AUTO])
+            self.cfg.save_user_overrides([_CFG_HAVE, _CFG_AUTO])
         except Exception:
             log.exception("failed to persist pricer prefs")
 
@@ -373,12 +372,12 @@ def _fmt_indexed(dt) -> str:
     delta = _d.datetime.now(_d.timezone.utc) - dt
     s = int(delta.total_seconds())
     if s < 60:
-        return f"{s}s ago"
+        return f"{s}s Ago"
     if s < 3600:
-        return f"{s // 60}m ago"
+        return f"{s // 60}m Ago"
     if s < 86400:
-        return f"{s // 3600}h ago"
-    return f"{s // 86400}d ago"
+        return f"{s // 3600}h Ago"
+    return f"{s // 86400}d Ago"
 
 
 def _html_escape(s: str) -> str:

@@ -57,9 +57,9 @@ def _cursor() -> Optional[tuple[int, int]]:
 # it to compound across the grid.
 _STEPS = ("tl", "tr", "bl")
 _STEP_LABEL = {
-    "tl": "Hover the TOP-LEFT slot, then press the hotkey.",
-    "tr": "Hover the TOP-RIGHT slot (last column, first row), then press the hotkey.",
-    "bl": "Hover the BOTTOM-LEFT slot (first column, last row), then press the hotkey.",
+    "tl": "Hover The TOP-LEFT Slot, Then Press The Hotkey.",
+    "tr": "Hover The TOP-RIGHT Slot (Last Column, First Row), Then Press The Hotkey.",
+    "bl": "Hover The BOTTOM-LEFT Slot (First Column, Last Row), Then Press The Hotkey.",
 }
 
 
@@ -73,7 +73,7 @@ class CalibrateDialog(QDialog):
         super().__init__(parent)
         self.cfg = cfg
         self.cfg_path = cfg_path
-        self.setWindowTitle(f"Calibrate {title} grid")
+        self.setWindowTitle(f"Calibrate {title} Grid")
         self.setModal(True)
         self._captures: dict[str, tuple[int, int]] = {}
         self._step_idx: int = 0
@@ -95,14 +95,21 @@ class CalibrateDialog(QDialog):
     def _build(self) -> None:
         v = QVBoxLayout(self)
 
-        v.addWidget(QLabel(
-            "Calibration uses a global hotkey so the cursor can stay over\n"
-            "the game. Hover each requested slot in PoE, then tap the hotkey.\n"
-            "(Nothing is clicked — only the cursor position is read.)"))
+        from .components import HelpBadge
+        intro = QHBoxLayout()
+        title_lbl = QLabel("Point At Three Slots")
+        title_lbl.setProperty("role", "section")
+        intro.addWidget(title_lbl)
+        intro.addWidget(HelpBadge(
+            "Calibration uses a global hotkey so the cursor can stay over "
+            "the game. Hover each requested slot in PoE, then tap the "
+            "hotkey. Nothing is clicked: only the cursor position is read."))
+        intro.addStretch(1)
+        v.addLayout(intro)
 
         # Hotkey row
         hk_row = QHBoxLayout()
-        hk_row.addWidget(QLabel("Capture hotkey:"))
+        hk_row.addWidget(QLabel("Capture Hotkey:"))
         self.hk_input = QLineEdit(self._hotkey_combo)
         self.hk_input.setMaximumWidth(120)
         self.hk_input.editingFinished.connect(
@@ -129,15 +136,15 @@ class CalibrateDialog(QDialog):
         self.lbl_bl = QLabel("—")
         cols = self.cfg.get(self._k("grid", "cols"), 12)
         rows = self.cfg.get(self._k("grid", "rows"), 5)
-        form.addRow("Top-left (0,0):", self.lbl_tl)
-        form.addRow(f"Top-right (0,{cols - 1}):", self.lbl_tr)
-        form.addRow(f"Bottom-left ({rows - 1},0):", self.lbl_bl)
+        form.addRow("Top-Left (0,0):", self.lbl_tl)
+        form.addRow(f"Top-Right (0,{cols - 1}):", self.lbl_tr)
+        form.addRow(f"Bottom-Left ({rows - 1},0):", self.lbl_bl)
         v.addLayout(form)
 
         # Reset / redo row
         ctl = QHBoxLayout()
         for label, fn in (("Reset", self._reset),
-                          ("Redo last", self._redo_last)):
+                          ("Redo Last", self._redo_last)):
             b = QPushButton(label)
             b.clicked.connect(fn)
             ctl.addWidget(b)
@@ -145,11 +152,14 @@ class CalibrateDialog(QDialog):
 
         # Window anchor selector – optional
         anchor_row = QHBoxLayout()
-        anchor_row.addWidget(QLabel("Save as window-relative from:"))
+        anchor_row.addWidget(QLabel("Save As Window-Relative From:"))
         self.anchor_combo = QComboBox()
-        self.anchor_combo.addItems(["(disabled)", "top_left", "top_right",
-                                    "bottom_left", "bottom_right"])
-        self.anchor_combo.setCurrentText("top_right")
+        for label, value in (("(Disabled)", ""), ("Top Left", "top_left"),
+                             ("Top Right", "top_right"),
+                             ("Bottom Left", "bottom_left"),
+                             ("Bottom Right", "bottom_right")):
+            self.anchor_combo.addItem(label, value)
+        self.anchor_combo.setCurrentIndex(self.anchor_combo.findData("top_right"))
         anchor_row.addWidget(self.anchor_combo, 1)
         v.addLayout(anchor_row)
 
@@ -173,8 +183,8 @@ class CalibrateDialog(QDialog):
         self._hotkey_combo = combo
         if _kb is None:
             self.status.setText(
-                "WARNING: 'keyboard' library not available — "
-                "calibration hotkey disabled.")
+                "Warning: The 'keyboard' Library Isn't Available, So The "
+                "Calibration Hotkey Is Disabled.")
             return
         try:
             # Emit signal so we hop back to the Qt thread before touching UI.
@@ -182,7 +192,7 @@ class CalibrateDialog(QDialog):
                 combo, lambda: self.captured.emit(),
                 suppress=False)
         except Exception as e:
-            self.status.setText(f"Failed to bind {combo!r}: {e}")
+            self.status.setText(f"Failed To Bind {combo!r}: {e}")
 
     def _unbind_hotkey(self) -> None:
         if self._hotkey_handle is not None and _kb is not None:
@@ -204,7 +214,7 @@ class CalibrateDialog(QDialog):
     def _tick_cursor(self) -> None:
         pos = _cursor()
         self.cursor_label.setText(
-            f"Cursor: {pos[0]}, {pos[1]}" if pos else "Cursor: unavailable")
+            f"Cursor: {pos[0]}, {pos[1]}" if pos else "Cursor: Unavailable")
 
     # ---- capture flow ----
     def _on_captured(self) -> None:
@@ -212,7 +222,7 @@ class CalibrateDialog(QDialog):
             return
         pos = _cursor()
         if not pos:
-            self.status.setText("Could not read cursor position.")
+            self.status.setText("Could Not Read The Cursor Position.")
             return
         step = _STEPS[self._step_idx]
         self._captures[step] = pos
@@ -228,13 +238,13 @@ class CalibrateDialog(QDialog):
     def _refresh_prompt(self) -> None:
         if self._step_idx >= len(_STEPS):
             self.prompt.setText(
-                "Done — review the captured points and click OK.")
+                "Done. Review The Captured Points And Click OK.")
         else:
             step = _STEPS[self._step_idx]
             self.prompt.setText(
                 f"[{self._step_idx + 1}/{len(_STEPS)}]  "
                 + _STEP_LABEL[step]
-                + f"\n(hotkey: {self._hotkey_combo})"
+                + f"\n(Hotkey: {self._hotkey_combo})"
             )
 
     def _cell_size(self) -> tuple[float, float]:
@@ -255,8 +265,8 @@ class CalibrateDialog(QDialog):
             return
         cw, ch = self._cell_size()
         self.status.setText(
-            f"origin=({c['tl'][0]},{c['tl'][1]})  "
-            f"cell_size=({cw:.2f},{ch:.2f})")
+            f"Origin: ({c['tl'][0]}, {c['tl'][1]})  ·  "
+            f"Cell Size: ({cw:.2f}, {ch:.2f})")
         self.ok_btn.setEnabled(cw > 0 and ch > 0)
 
     def _reset(self) -> None:
@@ -292,8 +302,8 @@ class CalibrateDialog(QDialog):
         self.cfg.set(self._k("grid", "cell_size"),
                      [round(cw, 2), round(ch, 2)])
 
-        anchor = self.anchor_combo.currentText()
-        if anchor and anchor != "(disabled)":
+        anchor = self.anchor_combo.currentData()
+        if anchor:
             try:
                 from ..vision.window import find_window
                 rect = find_window(
@@ -308,8 +318,8 @@ class CalibrateDialog(QDialog):
                         self._k("origin_relative_to_window"),
                         None)
                     self.status.setText(
-                        "Saved absolute origin. PoE window not detected, "
-                        "so window-relative offset was not stored.")
+                        "Saved The Absolute Origin. The PoE Window Wasn't "
+                        "Found, So No Window-Relative Offset Was Stored.")
                 else:
                     ax, ay = rect.anchor(anchor)
                     dx = c["tl"][0] - ax

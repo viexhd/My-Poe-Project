@@ -1,27 +1,18 @@
 """Flipper page.
 
-Ranks currencies from poe.ninja by a composite flip-attractiveness
-score (volume × margin × stability × confidence × liquidity). The
-highest-ranked rows are the best bulk-flip candidates for the current
-league.
+Ranks everything poe.ninja prices (currency, fragments, scarabs,
+essences, divination cards, gems, maps, uniques…, but not unique
+weapons or armour) by a composite flip-attractiveness score (volume ×
+margin × stability × confidence × liquidity). The highest-ranked rows
+are the best flip candidates for the league.
 
-Fetching runs on a ``QThread`` so the UI stays responsive; the snapshot
+Fetching runs on a ``QThread`` so the UI stays responsive; each category
 is cached to disk (``logs/ninja_cache/``) for 10 minutes to be kind to
 poe.ninja, and an older cache is used if poe.ninja can't be reached.
 
-Double-click a row to open the pathofexile.com/trade bulk exchange for
-that currency (paying chaos), in the in-app Trade Browser when enabled.
-
-Fixed here (the tab had stopped working):
-    * poe.ninja retired the endpoint it used; see economy/ninja.py.
-    * Columns sorted as *text* ("950" > "1,234"); cells now sort on
-      their numeric value.
-    * Lowering "Min volume" or showing low-confidence rows after a fetch
-      did nothing, because only the already-filtered rows were kept.
-      The raw lines are kept now and re-scored locally.
-    * The bulk-exchange link used ``?want=…&have=…``, which the trade
-      site ignores; it now sends a ``q=`` exchange query with the
-      trade-site currency id.
+Double-click a row to open it on pathofexile.com/trade (bulk exchange
+for currency-like items, a normal search for gems, maps and uniques), in
+the in-app Trade Browser when enabled.
 """
 from __future__ import annotations
 
@@ -38,26 +29,32 @@ from PySide6.QtCore import QRectF, Qt, QThread, QTimer, Signal
 from PySide6.QtGui import QColor, QPainter
 from PySide6.QtWidgets import (
     QAbstractItemView, QComboBox, QHBoxLayout, QHeaderView,
-    QLineEdit, QPushButton, QSpinBox, QStyle, QStyledItemDelegate,
+    QPushButton, QSpinBox, QStyle, QStyledItemDelegate,
     QTableWidget, QTableWidgetItem, QVBoxLayout, QWidget,
 )
 
 from ..core.config import ConfigStore
 from ..economy import CurrencyLine, FlipOpportunity, NinjaClient, score_currency_flips
+from ..economy.ninja import ALL_CATEGORIES, category_label
 from . import styles as S
 from .components import CardRow, HelpBadge, StatCard, Switch, caption, card, field
 from .icons import icon
+from .league import LeagueBox
+from .text import capitalise
 
 log = logging.getLogger("poe_qol.ui.flipper")
 
 
 # Config keys (persisted via save_user_overrides).
 _CFG_LEAGUE = "flipper.league"
+_CFG_CATEGORY = "flipper.category"
 _CFG_MIN_VOL = "flipper.min_volume"
 _CFG_INC_LOWCONF = "flipper.include_low_confidence"
 _CFG_AUTO_REFRESH_MIN = "flipper.auto_refresh_minutes"
 
 TRADE_EXCHANGE = "https://www.pathofexile.com/trade/exchange/"
+TRADE_SEARCH = "https://www.pathofexile.com/trade/search/"
+ALL = "all"
 
 # Workers that outlived FlipperWidget.shutdown()'s wait; held so Qt
 # doesn't destroy a running QThread (which aborts the process).
@@ -65,15 +62,17 @@ _ORPHANS: set = set()
 
 # (header, attribute, header tooltip)
 _COLUMNS = [
-    ("Currency",  "name",        ""),
+    ("Item",      "name",        ""),
+    ("Category",  "category",    "Its poe.ninja category."),
     ("Price",     "chaos_value", "Chaos for one."),
-    ("7 days",    "change_7d",   "Price change over the last week."),
-    ("Volume",    "volume_disp", "Traded per day."),
+    ("7 Days",    "change_7d",   "Price change over the last week."),
+    ("Volume",    "volume_disp", "Currency-like items: chaos traded per day. "
+                                 "Gems, maps and uniques: how many are listed."),
     ("Edge",      "edge_pct",    "Margin: buy/sell spread, or the gap "
                                  "between its chaos and divine prices."),
     ("Score",     "score",       "Overall flip rating. Higher is better."),
 ]
-_SCORE_COL = 5
+_SCORE_COL = 6
 _SORT_ROLE = Qt.ItemDataRole.UserRole
 _KEY_ROLE = Qt.ItemDataRole.UserRole + 1
 
@@ -84,6 +83,42 @@ def exchange_url(league: str, want: str, have: str = "chaos") -> str:
                       "have": [have], "want": [want]}}
     return (TRADE_EXCHANGE + urllib.parse.quote(league, safe="")
             + "?q=" + urllib.parse.quote(json.dumps(q, separators=(",", ":"))))
+
+
+def search_url(league: str, line: CurrencyLine) -> str:
+    """pathofexile.com/trade search for one gem / map / unique, cheapest
+    first, with its level, quality, links and tier as filters."""
+    query: dict = {"status": {"option": "online"}}
+    if line.search_name:
+        query["name"] = line.search_name
+    query["type"] = line.search_type or line.name
+    filters: dict = {}
+    misc: dict = {}
+    if line.gem_level:
+        misc["gem_level"] = {"min": line.gem_level}
+    if line.gem_quality:
+        misc["quality"] = {"min": line.gem_quality}
+    if line.corrupted is not None and (line.gem_level or line.category.startswith("Unique")):
+        misc["corrupted"] = {"option": "true" if line.corrupted else "false"}
+    if misc:
+        filters["misc_filters"] = {"filters": misc}
+    if line.links and line.links >= 5:
+        filters["socket_filters"] = {"filters": {"links": {"min": line.links}}}
+    if line.map_tier:
+        filters["map_filters"] = {"filters": {"map_tier": {
+            "min": line.map_tier, "max": line.map_tier}}}
+    if filters:
+        query["filters"] = filters
+    q = {"query": query, "sort": {"price": "asc"}}
+    return (TRADE_SEARCH + urllib.parse.quote(league, safe="")
+            + "?q=" + urllib.parse.quote(json.dumps(q, separators=(",", ":"))))
+
+
+def trade_url(league: str, line: CurrencyLine) -> str:
+    if line.is_bulk:
+        want = line.trade_id or line.details_id or line.name.lower().replace(" ", "-")
+        return exchange_url(league, want)
+    return search_url(league, line)
 
 
 class _FetchWorker(QThread):
@@ -98,6 +133,7 @@ class _FetchWorker(QThread):
     """
     done = Signal(object)          # CurrencySnapshot
     failed = Signal(str)
+    progress = Signal(int, int)
 
     _POLL_SEC = 0.05
 
@@ -112,10 +148,14 @@ class _FetchWorker(QThread):
         client, league, force = self._c, self._league, self._force
         box: dict = {}
         ready = threading.Event()
+        cancel = threading.Event()
 
         def fetch() -> None:
             try:
-                box["snap"] = client.fetch_currency(league, force=force)
+                box["snap"] = client.fetch_all(
+                    league, categories=ALL_CATEGORIES, force=force,
+                    progress=lambda n, t: box.__setitem__("progress", (n, t)),
+                    cancel=cancel)
             except Exception as e:  # noqa: BLE001
                 box["err"] = e
             finally:
@@ -123,11 +163,19 @@ class _FetchWorker(QThread):
 
         threading.Thread(target=fetch, name="ninja-fetch",
                          daemon=True).start()
-        while not ready.wait(self._POLL_SEC):
+        shown = None
+        while True:
+            finished = ready.wait(self._POLL_SEC)
             if self.isInterruptionRequested():
+                cancel.set()          # drop categories not yet started
                 return
-        if self.isInterruptionRequested():
-            return
+            # Progress is relayed from here so only this QThread emits.
+            prog = box.get("progress")
+            if prog is not None and prog != shown:
+                shown = prog
+                self.progress.emit(*prog)
+            if finished:
+                break
         if "err" in box:
             log.warning("ninja fetch failed: %s", box["err"])
             self.failed.emit(str(box["err"]))
@@ -206,7 +254,7 @@ class FlipperWidget(QWidget):
         self._auto_timer = QTimer(self)
         self._auto_timer.timeout.connect(lambda: self.refresh(force=True))
         self._apply_auto_refresh()
-        # Keep "updated N min ago" current.
+        # Keep "Updated N Min Ago" current.
         self._age_timer = QTimer(self)
         self._age_timer.timeout.connect(self._render_age)
         self._age_timer.start(30_000)
@@ -228,13 +276,13 @@ class FlipperWidget(QWidget):
         self.refresh_btn.clicked.connect(lambda: self.refresh(force=True))
 
         # ---- stat cards ----
-        self.top_card = StatCard("Top pick", help=(
-            "The highest-scoring currency right now."), icon="flip",
+        self.top_card = StatCard("Top Pick", help=(
+            "The highest-scoring item right now."), icon="flip",
             accent=S.ACCENT)
-        self.edge_card = StatCard("Best edge", help=(
-            "The biggest margin among the shown currencies."),
+        self.edge_card = StatCard("Best Edge", help=(
+            "The biggest margin among the shown items."),
             icon="wealth")
-        self.count_card = StatCard("Currencies", help=(
+        self.count_card = StatCard("Items", help=(
             "How many pass your filters."), icon="tag")
         self.age_card = StatCard("Updated", help=(
             "When poe.ninja's prices were fetched. Cached for 10 minutes."),
@@ -246,35 +294,44 @@ class FlipperWidget(QWidget):
         fc, fl = card()
         row = QHBoxLayout()
         row.setSpacing(18)
-        # Default to the trade page's league; traders work one league at
-        # a time, so sharing the value is the right default.
-        default_league = self.cfg.get(_CFG_LEAGUE) or self.cfg.get(
-            "trade.league", "Standard")
-        self.league_edit = QLineEdit(default_league)
-        self.league_edit.editingFinished.connect(self._on_league_changed)
-        row.addWidget(field("League", self.league_edit,
-                            "Exact league name, e.g. <b>Mirage</b> or "
-                            "<b>Hardcore Mirage</b>."), 2)
+        self.league_box = LeagueBox(self.cfg, _CFG_LEAGUE)
+        self.league_box.league_changed.connect(lambda _l: self.refresh())
+        row.addWidget(field("League", self.league_box,
+                            "<b>Latest</b> always follows the newest "
+                            "challenge league."), 2)
+
+        self.category_box = QComboBox()
+        self.category_box.addItem("All Categories", ALL)
+        for cat in ALL_CATEGORIES:
+            self.category_box.addItem(category_label(cat), cat)
+        i = self.category_box.findData(self.cfg.get(_CFG_CATEGORY, ALL))
+        self.category_box.setCurrentIndex(max(0, i))
+        self.category_box.setSizeAdjustPolicy(
+            QComboBox.SizeAdjustPolicy.AdjustToMinimumContentsLengthWithIcon)
+        self.category_box.setMinimumContentsLength(8)
+        self.category_box.currentIndexChanged.connect(self._on_filters_changed)
+        row.addWidget(field("Category", self.category_box,
+                            "Everything poe.ninja prices except unique "
+                            "weapons and armour."), 2)
 
         self.min_vol = QSpinBox()
         self.min_vol.setRange(0, 999999)
         self.min_vol.setValue(int(self.cfg.get(_CFG_MIN_VOL, 10)))
-        self.min_vol.setSuffix(" / day")
         self.min_vol.valueChanged.connect(self._on_filters_changed)
-        row.addWidget(field("Min volume", self.min_vol,
-                            "Hide currencies that trade fewer than this "
-                            "many units a day. Bulk flipping needs "
-                            "buyers."), 1)
+        row.addWidget(field("Min Volume", self.min_vol,
+                            "Hide items that trade fewer than this many "
+                            "a day (gems, maps and uniques: fewer listed). "
+                            "Flipping needs buyers."), 1)
 
         self.auto_box = QComboBox()
-        for label, minutes in (("Off", 0), ("5 min", 5), ("10 min", 10),
-                               ("30 min", 30)):
+        for label, minutes in (("Off", 0), ("5 Min", 5), ("10 Min", 10),
+                               ("30 Min", 30)):
             self.auto_box.addItem(label, minutes)
         saved = int(self.cfg.get(_CFG_AUTO_REFRESH_MIN, 0))
         idx = self.auto_box.findData(saved)
         self.auto_box.setCurrentIndex(idx if idx >= 0 else 0)
         self.auto_box.currentIndexChanged.connect(self._on_auto_changed)
-        row.addWidget(field("Auto refresh", self.auto_box,
+        row.addWidget(field("Auto Refresh", self.auto_box,
                             "Re-fetch prices on a timer."), 1)
 
         self.low_conf = Switch("Thin")
@@ -286,19 +343,20 @@ class FlipperWidget(QWidget):
         lch = QHBoxLayout()
         lch.addWidget(self.low_conf)
         lch.addWidget(HelpBadge(
-            "Show thin markets too: currencies with too little data for poe.ninja to be "
-            "sure of the price. Riskier, sometimes bigger margins."))
+            "Show thin markets too: items with too little data for "
+            "poe.ninja to be sure of the price. Riskier, sometimes bigger "
+            "margins."))
         lch.addStretch(1)
         lcl.addLayout(lch)
-        row.addWidget(lc, 1)
+        row.addWidget(lc, 0)
         fl.addLayout(row)
         v.addWidget(fc)
 
         # ---- table ----
         tc, tl = card("Ranking", (
             "Best flips first. Click a header to sort. "
-            "<b>Double-click</b> a row to open its bulk exchange on the "
-            "trade site."), icon="flip")
+            "<b>Double-click</b> a row to open it on the trade site."),
+            icon="flip")
         self.table = QTableWidget(0, len(_COLUMNS))
         for i, (label, _attr, tip) in enumerate(_COLUMNS):
             hi = QTableWidgetItem(label)
@@ -333,19 +391,15 @@ class FlipperWidget(QWidget):
         self.table.setItemDelegateForColumn(_SCORE_COL, self._bar)
         self.table.itemDoubleClicked.connect(self._open_trade_for_item)
         tl.addWidget(self.table, 1)
-        self.status = caption("Idle.")
+        self.status = caption("Idle")
         tl.addWidget(self.status)
         v.addWidget(tc, 1)
 
     # -- events --
-    def _on_league_changed(self) -> None:
-        self.cfg.set(_CFG_LEAGUE, self.league_edit.text().strip())
-        self._persist_prefs()
-        self.refresh(force=True)
-
-    def _on_filters_changed(self) -> None:
+    def _on_filters_changed(self, *_a) -> None:
         self.cfg.set(_CFG_MIN_VOL, int(self.min_vol.value()))
         self.cfg.set(_CFG_INC_LOWCONF, bool(self.low_conf.isChecked()))
+        self.cfg.set(_CFG_CATEGORY, self.category_box.currentData() or ALL)
         self._persist_prefs()
         # Re-score locally from the kept raw lines; no network hit.
         self._rescore_and_render()
@@ -366,8 +420,8 @@ class FlipperWidget(QWidget):
     def _persist_prefs(self) -> None:
         try:
             self.cfg.save_user_overrides(
-                [_CFG_LEAGUE, _CFG_MIN_VOL, _CFG_INC_LOWCONF,
-                 _CFG_AUTO_REFRESH_MIN])
+                [_CFG_MIN_VOL, _CFG_INC_LOWCONF, _CFG_AUTO_REFRESH_MIN,
+                 _CFG_CATEGORY])
         except Exception:
             log.exception("failed to persist flipper prefs")
 
@@ -387,7 +441,7 @@ class FlipperWidget(QWidget):
         w, self._worker = self._worker, None
         if w is None:
             return
-        for sig in (w.done, w.failed, w.finished):
+        for sig in (w.done, w.failed, w.progress, w.finished):
             try:
                 sig.disconnect()
             except (RuntimeError, TypeError):
@@ -406,12 +460,15 @@ class FlipperWidget(QWidget):
             return
         if self._worker and self._worker.isRunning():
             return
-        league = self.league_edit.text().strip() or "Standard"
-        self.status.setText(f"Fetching {league} prices…")
+        league = self.league_box.league()
+        self.status.setText(f"Fetching {league} Prices…")
         self.refresh_btn.setEnabled(False)
         self._worker = _FetchWorker(self._client, league, force=force)
         self._worker.done.connect(self._on_fetch_done)
         self._worker.failed.connect(self._on_fetch_failed)
+        self._worker.progress.connect(
+            lambda n, t: self.status.setText(
+                f"Fetching {league} Prices…  {n} / {t} Categories"))
         self._worker.finished.connect(self._on_fetch_finished)
         self._worker.start()
 
@@ -430,23 +487,33 @@ class FlipperWidget(QWidget):
     def _on_fetch_failed(self, msg: str) -> None:
         if self._shut_down:
             return
-        self.status.setText(f"⚠  {msg}")
+        self.status.setText(f"⚠  {capitalise(msg)}")
         if not self._lines:
-            self.age_card.set("—", "fetch failed", color=S.DANGER)
+            self.age_card.set("—", "Fetch Failed", color=S.DANGER)
 
     def _rescore_and_render(self) -> None:
+        cat = self.category_box.currentData() or ALL
+        lines = self._lines if cat == ALL else [
+            l for l in self._lines if l.category == cat]
         self._ops = score_currency_flips(
-            self._lines,
+            lines,
             min_volume=int(self.min_vol.value()),
             include_low_confidence=bool(self.low_conf.isChecked()),
         )
-        self._render(self._ops)
-        if self._snapshot is not None:
-            note = ("  ·  offline, showing saved prices"
-                    if self._snapshot.stale else "")
+        self._render(self._ops, len(lines))
+        snap = self._snapshot
+        if snap is not None:
+            notes = []
+            if snap.stale:
+                notes.append("Offline, Showing Saved Prices")
+            if snap.missing:
+                notes.append(f"{len(snap.missing)} Categories Unavailable")
+            note = "".join(f"  ·  {n}" for n in notes)
             self.status.setText(
-                f"{len(self._ops)} of {len(self._lines)} currencies  ·  "
-                f"best first{note}")
+                f"{len(self._ops)} Of {len(lines)} Items  ·  Best First{note}")
+            self.status.setToolTip(
+                "Unavailable: " + ", ".join(category_label(c) for c in snap.missing)
+                if snap.missing else "")
         self._render_age()
 
     # -- render --
@@ -455,14 +522,14 @@ class FlipperWidget(QWidget):
         if snap is None:
             return
         mins = int(max(0, time.time() - snap.fetched_at) // 60)
-        when = "just now" if mins < 1 else (
-            f"{mins} min ago" if mins < 120 else f"{mins // 60} h ago")
+        when = "Just Now" if mins < 1 else (
+            f"{mins} Min Ago" if mins < 120 else f"{mins // 60} H Ago")
         if snap.stale:
-            self.age_card.set(when, "offline · saved prices", color=S.WARN)
+            self.age_card.set(when, "Offline · Saved Prices", color=S.WARN)
         else:
-            self.age_card.set(when, f"poe.ninja · {snap.league}", color="")
+            self.age_card.set(when, f"PoE Ninja · {snap.league}", color="")
 
-    def _render(self, ops: list[FlipOpportunity]) -> None:
+    def _render(self, ops: list[FlipOpportunity], tracked: int) -> None:
         self._bar.top = max((o.score for o in ops), default=1.0) or 1.0
         self.table.setSortingEnabled(False)
         self.table.setRowCount(0)
@@ -476,19 +543,19 @@ class FlipperWidget(QWidget):
 
         if ops:
             top = ops[0]
-            self.top_card.set(top.name, f"score {top.score * 100:.0f}")
+            self.top_card.set(top.name, f"Score {top.score * 100:.0f}  ·  "
+                              f"{category_label(top.category)}")
         else:
-            self.top_card.set("—", "nothing passes the filters")
+            self.top_card.set("—", "Nothing Passes The Filters")
         edged = [o for o in ops if o.edge_pct is not None]
         if edged:
             best = max(edged, key=lambda o: abs(o.edge_pct))
             self.edge_card.set(f"{best.edge_pct:+.1f}%", best.name,
                                color=S.SUCCESS if best.edge_pct > 0 else S.WARN)
         else:
-            self.edge_card.set("—", "no margin data", color="")
+            self.edge_card.set("—", "No Margin Data", color="")
         self.count_card.set(str(len(ops)),
-                            f"of {len(self._lines)} tracked"
-                            if self._lines else "")
+                            f"Of {tracked:,} Tracked" if tracked else "")
 
     # -- actions --
     def _open_trade_for_item(self, item: QTableWidgetItem) -> None:
@@ -499,10 +566,7 @@ class FlipperWidget(QWidget):
         op = next((o for o in self._ops if _op_key(o) == key), None)
         if op is None:
             return
-        league = self.league_edit.text().strip() or "Standard"
-        want = op.trade_id or op.line.details_id or \
-            op.name.lower().replace(" ", "-")
-        url = exchange_url(league, want)
+        url = trade_url(self.league_box.league(), op.line)
         if self._open_in_app is not None:
             self._open_in_app(url)
             return
@@ -515,16 +579,21 @@ class FlipperWidget(QWidget):
 # ---- helpers ------------------------------------------------------------
 
 def _op_key(op: FlipOpportunity) -> str:
-    return op.trade_id or op.name
+    return f"{op.category}:{op.trade_id or op.name}"
 
 
 def _make_item(attr: str, op: FlipOpportunity) -> QTableWidgetItem:
     """Cell with numeric sort data + a tooltip that explains the score,
     so "why is X ranked here?" is answerable at a glance."""
     if attr == "volume_disp":
-        val = op.volume_chaos if op.volume_chaos is not None else op.volume
-        text = (_fmt_compact(op.volume_chaos) + " c"
-                if op.volume_chaos is not None else f"{op.volume:,}")
+        if op.listings is not None:
+            val, text = op.listings, f"{op.listings:,} Listed"
+        elif op.volume_chaos is not None:
+            val, text = op.volume_chaos, _fmt_compact(op.volume_chaos) + " c"
+        else:
+            val, text = op.volume, f"{op.volume:,}"
+    elif attr == "category":
+        val, text = category_label(op.category), None
     else:
         val = getattr(op, attr, None)
         text = None
@@ -533,12 +602,13 @@ def _make_item(attr: str, op: FlipOpportunity) -> QTableWidgetItem:
     if val is None:
         item.setText("—")
         item.setData(_SORT_ROLE, float("-inf"))
-    elif attr == "name":
+    elif attr in ("name", "category"):
         item.setText(str(val))
         item.setData(_SORT_ROLE, str(val).lower())
-        item.setData(_KEY_ROLE, _op_key(op))
-        if op.low_confidence:
-            item.setText(f"{val}  ·  thin")
+        if attr == "name":
+            item.setData(_KEY_ROLE, _op_key(op))
+            if op.low_confidence:
+                item.setText(f"{val}  ·  Thin")
     elif attr in ("edge_pct", "change_7d"):
         item.setText(f"{val:+.1f}%")
         item.setData(_SORT_ROLE, float(val))
@@ -554,18 +624,20 @@ def _make_item(attr: str, op: FlipOpportunity) -> QTableWidgetItem:
 
     item.setToolTip(
         f"<b>{op.name}</b><br>"
-        f"volume {op.volume_factor:.2f} · margin {op.spread_factor:.2f}<br>"
-        f"stability {op.stability_factor:.2f} · "
-        f"confidence {op.confidence_factor:.2f}<br>"
-        f"liquidity {op.liquidity_factor:.2f}<br>"
-        f"<b>score {op.score * 100:.0f}</b> · double-click to trade")
+        f"Volume {op.volume_factor:.2f} · Margin {op.spread_factor:.2f}<br>"
+        f"Stability {op.stability_factor:.2f} · "
+        f"Confidence {op.confidence_factor:.2f}<br>"
+        f"Liquidity {op.liquidity_factor:.2f}<br>"
+        f"<b>Score {op.score * 100:.0f}</b> · Double-Click To Trade")
 
     if attr in ("change_7d", "edge_pct") and isinstance(val, (int, float)):
         if val > 2:
             item.setForeground(QColor(S.SUCCESS))
         elif val < -2:
             item.setForeground(QColor(S.DANGER))
-    if attr == "name" and op.low_confidence:
+    if attr in ("name", "category") and op.low_confidence:
+        item.setForeground(QColor(S.FG_1))
+    if attr == "category":
         item.setForeground(QColor(S.FG_1))
     return item
 
@@ -583,7 +655,7 @@ def _fmt_chaos(v: float) -> str:
 
 
 def _fmt_compact(v: float) -> str:
-    for div, suf in ((1e9, "B"), (1e6, "M"), (1e3, "k")):
+    for div, suf in ((1e9, "B"), (1e6, "M"), (1e3, "K")):
         if abs(v) >= div:
             return f"{v / div:.1f}{suf}"
     return f"{v:.0f}"

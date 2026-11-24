@@ -42,6 +42,10 @@ currency instead of a bid/ask book, so two factors change meaning:
                         not zero, so liquid, steady currencies still
                         rank instead of all scoring 0.
     liquidity_factor  — 1.0 (no book to be lopsided).
+
+Item-overview categories (gems, maps, uniques, beasts…) only report how
+many are listed, so volume_factor uses the listing count and the margin
+is neutral (0.5).
 """
 from __future__ import annotations
 
@@ -60,6 +64,7 @@ _LOW_CONF_MULT = 0.35
 _LIQUIDITY_RATIO_KNEE = 5.0
 _CHAOS_VOL_HALF = 5000.0  # chaos traded/day at which volume_factor = 0.5
 _GAP_CAP = 0.10           # 10%+ cross-pair gap gets full marks
+_LISTINGS_HALF = 40       # listings at which volume_factor = 0.5
 
 
 @dataclass
@@ -87,6 +92,10 @@ class FlipOpportunity:
     def volume_chaos(self) -> float | None: return self.line.volume_chaos
     @property
     def trade_id(self) -> str: return self.line.trade_id
+    @property
+    def category(self) -> str: return self.line.category
+    @property
+    def listings(self) -> int | None: return self.line.listings
     @property
     def volume(self) -> int: return self.line.daily_volume
     @property
@@ -178,7 +187,12 @@ def _score_one(line: CurrencyLine) -> FlipOpportunity | None:
                              if line.receive_change_7d is not None
                              else line.pay_change_7d)
     conf = _confidence_factor(line)
-    if line.has_book:                       # legacy bid/ask data
+    if line.listings is not None:           # item overview: listings only
+        vol = line.listings / (line.listings + _LISTINGS_HALF) \
+            if line.listings > 0 else 0.0
+        spread = 0.5
+        liq = 1.0
+    elif line.has_book:                     # legacy bid/ask data
         vol = _volume_factor(line.daily_volume)
         spread = _spread_factor(line.spread_pct)
         liq = _liquidity_factor(line.pay_count, line.receive_count)

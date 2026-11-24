@@ -76,7 +76,7 @@ class WealthWidget(QWidget):
         # ---- hero ----
         top = QHBoxLayout()
         top.setSpacing(18)
-        self.rate_card = StatCard("Divine per hour", "—", hero=True, help=(
+        self.rate_card = StatCard("Divine Per Hour", "—", hero=True, help=(
             "Compares your two newest exports: how much your stash grew, "
             "divided by the time between them."), icon="wealth",
             accent=S.ACCENT)
@@ -86,7 +86,7 @@ class WealthWidget(QWidget):
         top.addWidget(self.rate_card, 2)
 
         oc, ol = card("Overlay", icon="eye")
-        self.overlay_cb = Switch("Show in game", big=True)
+        self.overlay_cb = Switch("Show In Game", big=True)
         self.overlay_cb.toggled.connect(self._on_overlay_toggled)
         ol.addWidget(with_help(self.overlay_cb, (
             "A small always-on-top box over the game. Drag to move, "
@@ -105,7 +105,7 @@ class WealthWidget(QWidget):
             "Never logs into Wealthy Exile."), icon="folder")
         frow = QHBoxLayout()
         self.dir_edit = QLineEdit(self.cfg.get(_K_DIR) or "")
-        self.dir_edit.setPlaceholderText("Choose the folder you save exports to")
+        self.dir_edit.setPlaceholderText("Choose The Folder You Save Exports To")
         self.dir_edit.editingFinished.connect(self._on_dir_edited)
         browse = QPushButton("Browse…")
         browse.setIcon(icon("folder", S.FG_1))
@@ -113,7 +113,7 @@ class WealthWidget(QWidget):
         frow.addWidget(self.dir_edit, 1)
         frow.addWidget(browse)
         fw = QWidget(); fw.setLayout(frow)
-        sl.addWidget(field("Exports folder", fw))
+        sl.addWidget(field("Exports Folder", fw))
 
         grid = QHBoxLayout()
         grid.setSpacing(18)
@@ -123,7 +123,7 @@ class WealthWidget(QWidget):
         i = self.unit_box.findData(self.cfg.get(_K_UNIT, "chaos"))
         self.unit_box.setCurrentIndex(max(0, i))
         self.unit_box.currentIndexChanged.connect(self._on_settings_changed)
-        grid.addWidget(field("CSV values in", self.unit_box,
+        grid.addWidget(field("CSV Values In", self.unit_box,
                              "The currency your export's totals are in."), 1)
 
         self.rate_spin = QDoubleSpinBox()
@@ -132,17 +132,17 @@ class WealthWidget(QWidget):
         self.rate_spin.setSpecialValueText("Auto")
         self.rate_spin.setValue(float(self.cfg.get(_K_RATE, 0) or 0))
         self.rate_spin.valueChanged.connect(self._on_settings_changed)
-        grid.addWidget(field("Chaos per divine", self.rate_spin,
+        grid.addWidget(field("Chaos Per Divine", self.rate_spin,
                              "<b>Auto</b> uses the Divine Orb price in your "
                              "newest export. Type a number to override."), 1)
 
         self.interval_spin = QSpinBox()
         self.interval_spin.setRange(MIN_INTERVAL_MINUTES, 24 * 60)
-        self.interval_spin.setSuffix(" min")
+        self.interval_spin.setSuffix(" Min")
         self.interval_spin.setValue(
             clamp_interval_minutes(self.cfg.get(_K_INTERVAL, MIN_INTERVAL_MINUTES)))
         self.interval_spin.valueChanged.connect(self._on_interval_changed)
-        grid.addWidget(field("Check every", self.interval_spin,
+        grid.addWidget(field("Check Every", self.interval_spin,
                              f"How often to re-read the folder "
                              f"(at least {MIN_INTERVAL_MINUTES} min)."), 1)
         sl.addLayout(grid)
@@ -171,12 +171,13 @@ class WealthWidget(QWidget):
         self.snap_list.clear()
         for s in src.snapshots():
             unit = s.unit if s.unit != "unknown" else self.unit_box.currentData()
-            extra = f", {s.skipped} rows skipped" if s.skipped else ""
+            extra = f", {s.skipped} Rows Skipped" if s.skipped else ""
             if s.divine_price:
                 extra += f", 1 div = {s.divine_price:,.0f}c"
             self.snap_list.addItem(
-                f"{s.taken_at:%Y-%m-%d %H:%M}  ·  {s.total:,.1f} {unit}  ·  "
-                f"{s.rows} rows{extra}  ·  {s.path.name}")
+                f"{s.taken_at:%Y-%m-%d %H:%M}  ·  {s.total:,.1f} "
+                f"{str(unit).capitalize()}  ·  {s.rows} Rows{extra}  ·  "
+                f"{s.path.name}")
 
     def _show_reading(self, r: RateReading) -> None:
         self.reading_label.setText(self.overlay.headline_text())

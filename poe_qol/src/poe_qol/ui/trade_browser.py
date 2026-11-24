@@ -104,23 +104,23 @@ def create_trade_browser(league: str = "Standard"):
                 b.setFixedWidth(36)
                 b.clicked.connect(slot)
                 bar.addWidget(b)
-            home = QPushButton("Trade home")
+            home = QPushButton("Trade Home")
             home.clicked.connect(lambda: self.open(HOME_URL.format(
                 league=urllib.parse.quote(self._league))))
             bar.addWidget(home)
             self.address = QLabel("")
             self.address.setProperty("role", "muted")
             bar.addWidget(self.address, 1)
-            ext = QPushButton("Open in my browser")
+            ext = QPushButton("Open In My Browser")
             ext.clicked.connect(lambda: QDesktopServices.openUrl(self.view.url()))
             bar.addWidget(ext)
-            signout = QPushButton("Sign out && clear")
+            signout = QPushButton("Sign Out && Clear")
             signout.setToolTip("Delete this window's cookies and cache.")
             signout.clicked.connect(self._clear)
             bar.addWidget(signout)
 
-            note = QLabel("Log in on pathofexile.com here if you want. Twice "
-                          "Corrupted never reads this window's cookies.")
+            note = QLabel("Log In On The Trade Site Here If You Want. Twice "
+                          "Corrupted Never Reads This Window's Cookies.")
             note.setProperty("role", "caption")
 
             body = QWidget()
@@ -147,7 +147,7 @@ def create_trade_browser(league: str = "Standard"):
 
         def _clear(self) -> None:
             ok = QMessageBox.question(
-                self, "Sign out & clear",
+                self, "Sign Out & Clear",
                 "Delete this window's cookies and cache? You will be "
                 "signed out of pathofexile.com here.")
             if ok != QMessageBox.StandardButton.Yes:
