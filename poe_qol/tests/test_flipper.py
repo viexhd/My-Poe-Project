@@ -293,6 +293,29 @@ class FlipperUiTests(unittest.TestCase):
         w.min_vol.setValue(10)
         self.assertEqual(w.table.rowCount(), 3)
 
+    def test_result_for_an_old_league_is_ignored(self):
+        import time
+        from poe_qol.economy.ninja import CurrencySnapshot
+        w, _ = self._widget()                       # league: Mirage
+        before = w.table.rowCount()
+        w._on_fetch_done(CurrencySnapshot(
+            "Standard", time.time(),
+            list(_parse_lines(_exchange([_xline("divine", 99.0, 1e6)])))))
+        self.assertEqual(w.table.rowCount(), before)
+        self.assertEqual(w._snapshot.league, "Mirage")
+
+    def test_refresh_during_a_fetch_runs_after_it(self):
+        from poe_qol.ui.flipper_widget import FlipperWidget
+        w, _ = self._widget()
+        w._busy = lambda: True
+        FlipperWidget.refresh(w, force=True)        # queued, not dropped
+        self.assertTrue(w._pending)
+        calls = []
+        w.refresh = lambda **k: calls.append(k)
+        w._on_fetch_finished()
+        self.assertEqual(calls, [{"force": True}])
+        self.assertIsNone(w._pending)
+
     def test_double_click_opens_bulk_exchange_query(self):
         import json, urllib.parse
         w, opened = self._widget()

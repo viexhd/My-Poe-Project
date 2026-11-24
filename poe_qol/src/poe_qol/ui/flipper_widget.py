@@ -53,6 +53,9 @@ _CFG_INC_LOWCONF = "flipper.include_low_confidence"
 _CFG_AUTO_REFRESH_MIN = "flipper.auto_refresh_minutes"
 
 TRADE_EXCHANGE = "https://www.pathofexile.com/trade/exchange/"
+# First run: how long to wait for the latest-league lookup before
+# fetching prices anyway.
+LEAGUE_WAIT_MS = 5000
 TRADE_SEARCH = "https://www.pathofexile.com/trade/search/"
 ALL = "all"
 
@@ -241,14 +244,25 @@ class FlipperWidget(QWidget):
             freshness_sec=int(cfg.get("flipper.cache_sec", 600)),
         )
         self._worker: Optional[_FetchWorker] = None
+        # A refresh asked for while a fetch runs (e.g. the latest league
+        # just arrived): None = nothing queued, else its `force` flag.
+        self._pending: Optional[bool] = None
         self._shut_down = False
         self._build()
         # Fire an initial fetch so the page is useful on first open. A
         # member timer (not QTimer.singleShot) so shutdown() can stop it.
+        # On a first run the league list isn't known yet: wait for it
+        # (the league picker's league_changed starts the fetch) rather
+        # than fetching Standard prices, with this timer as a fallback.
+        from .league import league_service
+        from ..trade.leagues import is_auto
         self._initial_timer = QTimer(self)
         self._initial_timer.setSingleShot(True)
-        self._initial_timer.timeout.connect(lambda: self.refresh())
-        self._initial_timer.start(200)
+        self._initial_timer.timeout.connect(self._initial_refresh)
+        self._initial_timer.start(
+            LEAGUE_WAIT_MS
+            if is_auto(self.league_box.value()) and not league_service().leagues
+            else 200)
 
         # Optional auto-refresh.
         self._auto_timer = QTimer(self)
@@ -455,10 +469,20 @@ class FlipperWidget(QWidget):
             _ORPHANS.add(w)
 
     # -- fetch --
+    def _initial_refresh(self) -> None:
+        if self._snapshot is None and not self._busy():
+            self.refresh()
+
+    def _busy(self) -> bool:
+        return bool(self._worker and self._worker.isRunning())
+
     def refresh(self, *, force: bool = False) -> None:
         if self._shut_down:
             return
-        if self._worker and self._worker.isRunning():
+        if self._busy():
+            # Run again when the current fetch ends: its league may be
+            # out of date (the league list arrived mid-fetch).
+            self._pending = bool(self._pending) or force
             return
         league = self.league_box.league()
         self.status.setText(f"Fetching {league} Prices…")
@@ -473,12 +497,20 @@ class FlipperWidget(QWidget):
         self._worker.start()
 
     def _on_fetch_finished(self) -> None:
-        if not self._shut_down:
-            self.refresh_btn.setEnabled(True)
+        if self._shut_down:
+            return
+        self.refresh_btn.setEnabled(True)
+        if self._pending is not None:
+            force, self._pending = self._pending, None
+            self.refresh(force=force)
 
     def _on_fetch_done(self, snap) -> None:
         # A result queued before shutdown() disconnected can still land.
         if self._shut_down:
+            return
+        if snap.league != self.league_box.league():
+            log.info("ignoring %s prices: league is now %s",
+                     snap.league, self.league_box.league())
             return
         self._snapshot = snap
         self._lines = list(snap.lines)
