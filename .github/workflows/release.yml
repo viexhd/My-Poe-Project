@@ -1,0 +1,108 @@
+# Builds the Windows app and publishes it as a GitHub Release.
+#
+# Release a new version:
+#   1. bump __version__ in poe_qol/src/poe_qol/__init__.py (and
+#      pyproject.toml), commit, push
+#   2. git tag v1.2.3 && git push origin v1.2.3
+# Or run it from the Actions tab ("Run workflow"); tick "publish" to
+# create the release for the current __version__, otherwise the build is
+# only attached to the run as an artifact.
+name: Release
+
+on:
+  push:
+    tags: ["v*"]
+  workflow_dispatch:
+    inputs:
+      publish:
+        description: "Publish a GitHub release for the current version"
+        type: boolean
+        default: false
+
+permissions:
+  contents: write
+
+concurrency:
+  group: release-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  windows:
+    runs-on: windows-latest
+    timeout-minutes: 45
+    defaults:
+      run:
+        shell: pwsh
+        working-directory: poe_qol
+    steps:
+      - uses: actions/checkout@v5
+
+      - uses: actions/setup-python@v6
+        with:
+          python-version: "3.13"
+          cache: pip
+          cache-dependency-path: poe_qol/requirements.txt
+
+      - name: Read version
+        id: ver
+        run: |
+          $init = Get-Content src\poe_qol\__init__.py -Raw
+          if ($init -notmatch '__version__\s*=\s*"([^"]+)"') { throw "No __version__ in __init__.py" }
+          $v = $Matches[1]
+          if ("${{ github.ref_type }}" -eq "tag" -and "${{ github.ref_name }}" -ne "v$v") {
+            throw "Tag ${{ github.ref_name }} doesn't match __version__ $v. Bump src/poe_qol/__init__.py first."
+          }
+          "version=$v" >> $env:GITHUB_OUTPUT
+
+      - name: Tests
+        env:
+          QT_QPA_PLATFORM: offscreen
+          PYTHONPATH: src
+        run: |
+          python -m pip install --disable-pip-version-check -q -r requirements.txt pytest
+          python -m pytest -q tests
+
+      - name: Install Inno Setup
+        run: |
+          if (-not (Get-Command iscc.exe -ErrorAction SilentlyContinue) -and
+              -not (Test-Path "${env:ProgramFiles(x86)}\Inno Setup 6\ISCC.exe")) {
+            choco install innosetup -y --no-progress
+          }
+
+      - name: Build exe, zip and installer
+        run: ./packaging/build_windows.ps1 -Version "${{ steps.ver.outputs.version }}"
+
+      - name: Smoke test the exe
+        run: |
+          $exe = "dist\TwiceCorrupted\TwiceCorrupted.exe"
+          $p = Start-Process -FilePath $exe -ArgumentList "--smoke-test" -Wait -PassThru
+          Get-Content dist\TwiceCorrupted\logs\poe_qol.log -Tail 25 -ErrorAction SilentlyContinue
+          if (Test-Path dist\TwiceCorrupted\logs\crash.log) { Get-Content dist\TwiceCorrupted\logs\crash.log }
+          if ($p.ExitCode -ne 0) { throw "Smoke test failed with exit code $($p.ExitCode)" }
+          $setup = "dist\release\TwiceCorrupted-Setup-${{ steps.ver.outputs.version }}.exe"
+          if (-not (Test-Path $setup)) { throw "Installer was not built" }
+
+      - uses: actions/upload-artifact@v5
+        with:
+          name: TwiceCorrupted-${{ steps.ver.outputs.version }}-windows
+          path: poe_qol/dist/release/*
+          if-no-files-found: error
+
+      - name: Publish release
+        if: github.ref_type == 'tag' || inputs.publish
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          $v = "${{ steps.ver.outputs.version }}"
+          $tag = "v$v"
+          $files = (Get-ChildItem dist\release\*).FullName
+          (Get-Content packaging\RELEASE_NOTES.md -Raw).Replace("VERSION", $v) |
+            Set-Content -Encoding utf8 release_notes.md
+          gh release view $tag *> $null
+          if ($LASTEXITCODE -eq 0) {
+            gh release upload $tag @files --clobber
+          } else {
+            gh release create $tag @files --title "Twice Corrupted $v" `
+              --notes-file release_notes.md --generate-notes --target $env:GITHUB_SHA
+          }
+          if ($LASTEXITCODE -ne 0) { throw "gh release failed" }

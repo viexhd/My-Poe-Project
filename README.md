@@ -63,12 +63,32 @@ The overlay shows the change between your last two exports. Each export's Divine
 ## Requirements
 
 - Windows 10/11
-- Python **3.11+** (tested on 3.12 and 3.14)
+- Python **3.11+** (tested on 3.12 and 3.14), only when running from source: the release exe bundles it
 - PoE in **windowed** or **windowed fullscreen** mode, for the overlay
 
 ## Install and run
 
-### Get the code
+### Download (easiest)
+
+Get the latest build from **[Releases](https://github.com/viexhd/Twice-Corrupted/releases/latest)**:
+
+- **`TwiceCorrupted-Setup-<version>.exe`**: run it and follow the steps. It installs for your user only (no admin prompt), adds Start-menu shortcuts and an uninstaller, and can launch the app when it finishes.
+- **`TwiceCorrupted-<version>-portable.zip`**: no install. Unzip it anywhere you can write to and run `TwiceCorrupted.exe`.
+
+No Python needed for either. If Path of Exile runs as administrator, start the app with the **Twice Corrupted (admin, for in-game hotkeys)** shortcut so hotkeys reach the game (portable: `TwiceCorrupted.exe --elevate`). The exe isn't code-signed yet, so Windows SmartScreen may warn on first run: **More info → Run anyway**. Upgrading keeps your settings, slot profiles and calibration.
+
+### Build the exe yourself
+
+```powershell
+cd poe_qol
+powershell -ExecutionPolicy Bypass -File packaging\build_windows.ps1
+```
+
+This writes the portable zip, and the installer when [Inno Setup 6](https://jrsoftware.org/isdl.php) is installed, to `poe_qol\dist\release\`. To publish a release, bump `__version__` in `poe_qol/src/poe_qol/__init__.py` and `pyproject.toml`, then push a tag (`git tag v1.2.3 && git push origin v1.2.3`): the **Release** workflow builds, tests and publishes it. You can also start the workflow from the Actions tab.
+
+### Run from source
+
+#### Get the code
 
 ```powershell
 git clone https://github.com/viexhd/Twice-Corrupted.git
@@ -81,13 +101,13 @@ If you cloned the repo under its old name, point the existing clone at the new U
 git remote set-url origin https://github.com/viexhd/Twice-Corrupted.git
 ```
 
-### Quick start
+#### Quick start
 
 Double-click **`poe_qol/run.bat`**. On first launch it creates `poe_qol/.venv`, installs the dependencies and the app, then starts it.
 
 PoE usually runs elevated, and Windows blocks global hotkeys from non-elevated programs. If hotkeys (F12, Ctrl+Alt+C, the calibration key) do nothing while the game has focus, use **`poe_qol/run-admin.bat`**.
 
-### Manual setup
+#### Manual setup
 
 ```powershell
 cd poe_qol
@@ -150,11 +170,13 @@ poe_qol\.venv\Scripts\python -m unittest discover -s poe_qol/tests -v
 
 ```
 Twice-Corrupted/
+.github/workflows/        release.yml: builds the Windows exe + installer and publishes a release
 docs/                     research, audit, roadmap and design documents
 legacy/                   archived scripts and retired macros (reference only, not used)
 poe_qol/
     assets/               app icon, banner, social preview (+ brand/icon.svg source)
     config/               default.yaml, profiles, slot profiles, map mod catalogue
+    packaging/            Windows build: PyInstaller spec, build script, Inno Setup installer
     src/poe_qol/
         core/             config, shared state, logging
         engine/           Macro base class, registry, scheduler

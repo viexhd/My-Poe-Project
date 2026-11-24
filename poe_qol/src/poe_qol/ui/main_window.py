@@ -21,7 +21,6 @@ third-party disclaimer.
 from __future__ import annotations
 
 import logging
-from pathlib import Path
 
 from PySide6.QtCore import QSize, Qt, QTimer
 from PySide6.QtGui import QFontDatabase, QKeySequence, QShortcut
@@ -32,6 +31,7 @@ from PySide6.QtWidgets import (
 )
 
 from .. import APP_NAME, DISCLAIMER, __version__
+from ..paths import app_root
 
 from ..core.config import ConfigStore
 from ..core.state import AppState
@@ -50,7 +50,7 @@ from .wealth_widget import WealthWidget
 
 log = logging.getLogger("poe_qol.ui.main_window")
 
-_REPO = Path(__file__).resolve().parents[3]          # .../poe_qol
+_REPO = app_root()          # poe_qol/ from source; the exe's folder when packaged
 _FONT_DIR = _REPO / "assets" / "brand" / "fonts"
 
 # Short help for known macros (the Home page hotkey list).
@@ -195,7 +195,7 @@ class MainWindow(QMainWindow):
         brand.setSpacing(10)
         logo = QLabel()
         from .branding import resolve_icon_path
-        ip = resolve_icon_path(_REPO.parent)
+        ip = resolve_icon_path(_REPO)
         if ip is not None:
             from PySide6.QtGui import QPixmap
             pm = QPixmap(str(ip))
@@ -439,7 +439,7 @@ class MainWindow(QMainWindow):
         box.setWindowTitle(f"About {APP_NAME}")
         ip = None
         from .branding import resolve_icon_path
-        ip = resolve_icon_path(_REPO.parent)
+        ip = resolve_icon_path(_REPO)
         if ip is not None:
             from PySide6.QtGui import QPixmap
             pm = QPixmap(str(ip))
