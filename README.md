@@ -84,7 +84,7 @@ cd poe_qol
 powershell -ExecutionPolicy Bypass -File packaging\build_windows.ps1
 ```
 
-This writes the portable zip, and the installer when [Inno Setup 6](https://jrsoftware.org/isdl.php) is installed, to `poe_qol\dist\release\`. To publish a release, bump `__version__` in `poe_qol/src/poe_qol/__init__.py` and `pyproject.toml`, then push a tag (`git tag v1.2.3 && git push origin v1.2.3`): the **Release** workflow builds, tests and publishes it. You can also start the workflow from the Actions tab.
+This writes the portable zip, and the installer when [Inno Setup 6](https://jrsoftware.org/isdl.php) is installed, to `poe_qol\dist\release\`. To publish a release, bump `__version__` in `poe_qol/src/poe_qol/__init__.py` and `pyproject.toml` and push to `main`. The **Release** workflow sees there's no release for that version yet, then builds, tests, smoke-tests and publishes it as tag `v<version>`. Pushing a `v*` tag or starting the workflow from the Actions tab works too.
 
 ### Run from source
 
