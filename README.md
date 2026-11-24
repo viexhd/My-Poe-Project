@@ -41,18 +41,18 @@ The window is a dashboard: a sidebar on the left (**Ctrl+1 … Ctrl+8** jump bet
 | **Area Select** | **Alt+drag** across the inventory to select slots, with a live rectangle, slot count and empty/occupied marks. **Manual** mode (default) keeps the slots highlighted and ticks each one off as you Ctrl-click it. **Experimental** mode Ctrl-clicks them for you. See [`docs/AREA_SELECT.md`](docs/AREA_SELECT.md). | Manual: none. Experimental: ⚠️ many clicks per gesture, **not compliant** |
 | **Map Search** | Pick map mods to exclude, set rarity, corrupted, tier and a minimum "# Modifiers", and save your own presets. **Open Trade** opens the pre-filled search (`/trade/search/<league>?q=…`) in the Trade Browser; **Open in my browser** uses your normal browser instead. | None. By default no API call is made; the trade site runs the search when the page opens. |
 | **Trade Browser** (sidebar) | A browser window showing the real pathofexile.com/trade. Log in there yourself (email or Steam sign-in). Only `pathofexile.com` pages load inside it, and other links open in your normal browser. **Sign out & clear** wipes its cookies. The app never reads them. | None |
-| **Wealth** | **Divine per hour** from your Wealthy Exile CSV exports: it compares the two newest exports in a folder you pick and re-checks it every N minutes (minimum 5). Includes an optional **always-on-top overlay** over the game that you can drag and right-click. | None. Reads only your CSV files and never logs into Wealthy Exile. |
+| **Wealth** | Works like Wealthy Exile: **Connect account** signs in on pathofexile.com (GGG's official OAuth), then the app **syncs your stash tabs every hour** (or on demand), prices them with poe.ninja and keeps a local history. Pick any **time range** for the wealth change, div/h, a Total/Hourly chart and per-item gains and losses. Old Wealthy Exile CSV exports can be imported. Optional **always-on-top overlay**. | None. Reads your stash through GGG's API with your permission; prices from poe.ninja. |
 | **Flipper** | Ranks currencies to bulk-flip using poe.ninja's live exchange prices: top pick, best margin, a score bar per currency. Double-click a row to open its bulk exchange on the trade site. Falls back to the last saved prices when poe.ninja can't be reached. | None |
 | **Pricer** | Prices a copied item using the trade site | None. ⚠️ It calls the trade site's search API; see the compliance doc. |
 | **Coordinate picker** | Ctrl+Alt+C saves the cursor position, Ctrl+Alt+V lists the saved positions | None |
 | **About** (sidebar) | Version and the GGG disclaimer | — |
 
-**Divine-per-hour workflow:**
-1. On wealthyexile.com press **Sync stash**.
-2. Open **⋯ → Export CSV** and save the file into your exports folder.
-3. Repeat later.
+**Wealth tab workflow:**
+1. Press **Connect account**, log in on pathofexile.com and press **Authorize**.
+2. Leave **Automatic sync** on (hourly) or press **Sync now**.
+3. Pick a time range: last hour to 30 days, all history, or custom.
 
-The overlay shows the change between your last two exports. Each export's Divine Orb row supplies the chaos-per-divine rate automatically, or you can set your own. The export time comes from the file name Wealthy Exile gives it (`Wealthy-Exile-export-MM_DD_YYYY H_MM.csv`). It needs PoE in windowed or windowed-fullscreen mode. A live Wealthy Exile feed isn't built: Wealthy Exile has no public API, so that would need their permission (see [`docs/WEALTHY_EXILE_INTEGRATION.md`](docs/WEALTHY_EXILE_INTEGRATION.md)).
+Needs a GGG-registered OAuth client ID, which GGG issues per application. Setup, the change calculation, privacy and limits are in [`docs/WEALTH_SYNC.md`](docs/WEALTH_SYNC.md). The overlay needs PoE in windowed or windowed-fullscreen mode.
 
 **Under the hood**
 
@@ -161,6 +161,7 @@ poe_qol\.venv\Scripts\python -m unittest discover -s poe_qol/tests -v
 | [`docs/UI_UX_PROPOSAL.md`](docs/UI_UX_PROPOSAL.md) | Design system, navigation, layouts |
 | [`docs/COMPLIANCE_REVIEW.md`](docs/COMPLIANCE_REVIEW.md) | GGG policy and per-feature risk assessment |
 | [`docs/AREA_SELECT.md`](docs/AREA_SELECT.md) | Alt+drag area selection: setup, usage, settings, architecture, limitations |
+| [`docs/WEALTH_SYNC.md`](docs/WEALTH_SYNC.md) | Wealth tab: account stash sync, ranges, pricing, privacy |
 | [`docs/WEALTHY_EXILE_INTEGRATION.md`](docs/WEALTHY_EXILE_INTEGRATION.md) | Wealthy Exile integration feasibility and proposal |
 | [`docs/REPOSITORY_AUDIT.md`](docs/REPOSITORY_AUDIT.md) | What the cleanup changed and why |
 | [`docs/VERIFICATION_REPORT.md`](docs/VERIFICATION_REPORT.md) | What was tested, known issues |
@@ -187,7 +188,8 @@ poe_qol/
         vision/           window lookup (+ optional capture / template matching)
         trade/            Map Search query builder and trade URL
         ui/               Qt main window, pages and shared components
-        economy/          poe.ninja flipper, Wealthy Exile CSV + divine/hour
+        economy/          poe.ninja flipper and prices, stash sync, wealth history
+        ggg/              official PoE API: OAuth (PKCE), rate limits, stash endpoints
         tools/            build_brand (renders the icon / banner assets)
     tests/                unittest suite
     pyproject.toml        package metadata and dependencies

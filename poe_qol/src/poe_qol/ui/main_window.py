@@ -12,7 +12,8 @@ Pages:
     * Map Search  – visual map mod exclusion → pathofexile.com/trade link
     * Flipper     – poe.ninja-backed bulk currency flip ranking
     * Pricer      – clipboard-driven trade-site price lookup
-    * Wealth      – divine/hour from Wealthy Exile CSV exports + overlay
+    * Wealth      – stash sync from the PoE account (hourly), wealth
+                    change over any time range, overlay
 
 Ctrl+1 … Ctrl+8 jump between pages. The sidebar's Trade Browser opens
 the in-app pathofexile.com/trade window; About shows GGG's required
@@ -92,7 +93,9 @@ _PAGES = [
     ("Pricer", "tag",
      "Copy an item in game (<b>Ctrl+C</b>) and its price appears here."),
     ("Wealth", "wealth",
-     "Your divine orbs per hour, worked out from Wealthy Exile CSV exports."),
+     "Syncs your stash tabs from your Path of Exile account (hourly if you "
+     "like), prices them with poe.ninja and shows how much your wealth "
+     "changed over any time range you pick."),
 ]
 _SECTIONS = {0: "PLAY", 4: "TRADE"}
 
@@ -133,7 +136,8 @@ class MainWindow(QMainWindow):
 
         open_in_app = (self.open_trade_browser
                        if cfg.get("trade_browser.enabled", True) else None)
-        self._wealth = WealthWidget(cfg)
+        self._wealth = WealthWidget(
+            cfg, ninja_cache=_REPO / "logs" / "ninja_cache")
         widgets = [
             self._build_home(),
             SlotSelector(cfg, cfg_path="macros.inventory_dump",

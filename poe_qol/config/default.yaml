@@ -190,14 +190,29 @@ pricer:
 trade_browser:
   enabled: true              # false = Map Search opens your normal browser
 
-# ---- Divine-per-hour overlay ----
-# Reads ONLY the Wealthy Exile CSV files you export yourself
-# (wealthyexile.com: Stash -> ... -> Export CSV) into `exports_dir`, and
-# compares the two newest. Sends nothing and never logs into Wealthy Exile.
+# ---- Wealth: stash sync from your Path of Exile account ----
+# Works like Wealthy Exile: "Connect account" opens pathofexile.com's own
+# consent page in your browser (OAuth 2.1 + PKCE, public client, loopback
+# redirect). The app gets account:profile, account:leagues and
+# account:stashes only, reads the chosen stash tabs through GGG's
+# official API, prices them with poe.ninja and stores snapshots in
+# <user data>/twice-corrupted/wealth.sqlite. See docs/WEALTH_SYNC.md.
 wealth:
-  exports_dir: null          # folder you save Wealthy Exile exports to
-  assumed_unit: chaos        # unit of CSV values when the header doesn't say
-  chaos_per_divine: 0        # 0 = auto: Divine Orb price in the newest export
-  interval_minutes: 5        # folder re-check interval; minimum 5
+  oauth:
+    # GGG must register the app before account sign-in works
+    # (https://www.pathofexile.com/developer/docs, oauth@grindinggear.com).
+    # A public client has no secret, so its id is safe to ship here.
+    client_id: null
+    contact: null              # sent in the User-Agent, as GGG requires
+    redirect_port: 0           # 0 = any free port on 127.0.0.1
+  league: null               # null = trade.league
+  realm: pc                  # pc | xbox | sony
+  auto_sync: true
+  sync_interval_minutes: 60  # automatic sync interval; minimum 15
+  synced_tabs: {}            # {league: [tab ids]}; a league missing = all tabs
+  range: 24h                 # 1h 3h 6h 12h 24h 3d 7d 14d 30d all custom
+  range_custom: null         # [start, end] epoch seconds, for range: custom
+  chart: total               # total | hourly
+  chaos_per_divine: 0        # 0 = auto: poe.ninja's Divine Orb price
   overlay_visible: false
   overlay_pos: null          # [x, y], written when you drag the overlay
